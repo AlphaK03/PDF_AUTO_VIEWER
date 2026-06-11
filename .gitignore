@@ -1,0 +1,25 @@
+# ---- Resultados de compilación (.NET) ----
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+publish/
+artifacts/
+
+# ---- Archivos de usuario / IDE ----
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.idea/
+*.swp
+
+# ---- Datos de ejecución / diagnóstico (no son código fuente) ----
+*.log
+WebView2/
+
+# ---- Excluidos de este repositorio ----
+CLAUDE.md
+demo_assets/
+docs/
