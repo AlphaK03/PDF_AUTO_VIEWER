@@ -1,19 +1,28 @@
 # PDF Auto Viewer
 
-Aplicación de escritorio para Windows que vigila una carpeta de descargas y abre
-automáticamente las instrucciones de trabajo (WI / MPI) en formato PDF. Al cerrar
-el documento puede eliminarlo de forma segura para mantener limpia la carpeta.
+Aplicación de escritorio para Windows que vigila la carpeta de descargas y abre
+automáticamente las instrucciones de trabajo (WI / MPI) en formato PDF en un
+visor integrado. Al cerrar el documento lo elimina de forma segura para mantener
+limpia la carpeta.
 
 Pensada para entornos de manufactura donde los documentos pueden venir en dos
 idiomas, identificados por un sufijo en el nombre del archivo (`_SPA`, `_ENG`).
+
+## Comportamiento
+
+- Los PDF se abren siempre en el **visor integrado** (motor WebView2 / Chromium).
+- Los PDF se **eliminan automáticamente** al cerrar el documento.
+- **Límite de visualización de 20 minutos**: a los 15 minutos se avisa al usuario
+  y a los 20 el documento se cierra solo.
+- Cuando se descargan ambos idiomas a la vez, se abre el **idioma preferido**;
+  si solo llega uno, se abre ese. El idioma preferido es la única opción
+  configurable y se elige desde la ventana principal.
 
 ## Requisitos
 
 - Windows 10 / 11 (x64)
 - [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
-- Microsoft Edge (incluido en Windows)
-- WebView2 Runtime — necesario solo si se usa el visor integrado
-  (incluido por defecto en Windows 11)
+- WebView2 Runtime (incluido por defecto en Windows 11)
 
 ## Compilar y ejecutar
 
@@ -44,10 +53,11 @@ PdfAutoViewer/
 
 ## Configuración
 
-La configuración del usuario se guarda en
-`%LOCALAPPDATA%\PdfAutoViewer\settings.json` y se edita desde el diálogo de
-ajustes de la propia aplicación (idioma preferido, carpeta vigilada, eliminación
-automática, visor integrado, etc.).
+La única opción configurable es el **idioma preferido**, que se elige desde la
+ventana principal de la aplicación y se guarda en
+`%LOCALAPPDATA%\PdfAutoViewer\settings.json`. El resto del comportamiento
+(carpeta vigilada, visor integrado, auto-eliminación, límite de 20 minutos) es
+fijo por diseño.
 
 ## Dependencias
 

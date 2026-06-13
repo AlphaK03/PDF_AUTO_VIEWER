@@ -27,13 +27,12 @@ public sealed class TrayApp : ApplicationContext
         _monitor    = new FolderMonitor(path => _pdfManager.Schedule(path));
         _monitor.Start(_settings.EffectiveWatchFolder);
 
-        _statusForm = new StatusForm(_settings, OpenSettings);
+        _statusForm = new StatusForm(_settings);
         _statusForm.Show();
 
-        // Warm up the embedded viewer's browser process so the first PDF
+        // Warm up the built-in viewer's browser process so the first PDF
         // opens instantly instead of paying the WebView2 cold start.
-        if (_settings.UseBuiltInViewer)
-            PdfViewerForm.Prewarm();
+        PdfViewerForm.Prewarm();
     }
 
     // ── Tray icon ──────────────────────────────────────────────────────────
@@ -41,13 +40,11 @@ public sealed class TrayApp : ApplicationContext
     private NotifyIcon BuildTrayIcon()
     {
         var menu = new ContextMenuStrip();
-        menu.Items.Add("● PDF Auto Viewer active").Enabled = false;
+        menu.Items.Add("● PDF Auto Viewer activo").Enabled = false;
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add("Show status panel", null, (_, _) => ShowStatusForm());
+        menu.Items.Add("Mostrar ventana", null, (_, _) => ShowStatusForm());
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add("Settings…",         null, (_, _) => OpenSettings());
-        menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add("Quit",              null, (_, _) => Quit());
+        menu.Items.Add("Salir",           null, (_, _) => Quit());
 
         var icon = new NotifyIcon
         {
@@ -94,43 +91,31 @@ public sealed class TrayApp : ApplicationContext
 
     private void HandleEvent(string type, string message)
     {
-        if (type == PdfLifecycleManager.EventError)
+        // The 15-minute viewing-time warning is the only routine notification.
+        if (type == PdfLifecycleManager.EventWarning)
         {
-            _tray.ShowBalloonTip(4000, "Error — PDF Auto Viewer", message, ToolTipIcon.Error);
+            _tray.ShowBalloonTip(8000, "PDF Auto Viewer", message, ToolTipIcon.Warning);
             return;
         }
 
-        if (_settings.ShowNotifications)
-            _tray.ShowBalloonTip(2000, "PDF Auto Viewer", message, ToolTipIcon.Info);
+        // Errors are surfaced so that a failure to open is never silent.
+        if (type == PdfLifecycleManager.EventError)
+        {
+            _tray.ShowBalloonTip(5000, "Error — PDF Auto Viewer", message, ToolTipIcon.Error);
+            return;
+        }
+
+        // Detected / opened / deleted events are intentionally silent.
     }
 
     // ── UI actions ─────────────────────────────────────────────────────────
 
     private void ShowStatusForm()
     {
-        _statusForm ??= new StatusForm(_settings, OpenSettings);
+        _statusForm ??= new StatusForm(_settings);
         _statusForm.Show();
         _statusForm.BringToFront();
         _statusForm.Activate();
-    }
-
-    private void OpenSettings()
-    {
-        string oldFolder = _settings.EffectiveWatchFolder;
-
-        using var dlg = new SettingsForm(_settings);
-        if (dlg.ShowDialog() == DialogResult.OK)
-        {
-            // Restart the monitor if the watched folder changed
-            if (_settings.EffectiveWatchFolder != oldFolder)
-                _monitor.Start(_settings.EffectiveWatchFolder);
-
-            // If the user just enabled the built-in viewer, warm it up now
-            if (_settings.UseBuiltInViewer)
-                PdfViewerForm.Prewarm();
-        }
-
-        _statusForm?.RefreshDisplay();
     }
 
     private void Quit()

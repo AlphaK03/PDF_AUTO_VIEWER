@@ -19,6 +19,7 @@ public sealed class PdfLifecycleManager : IDisposable
     public const string EventOpened   = "opened";
     public const string EventDeleted  = "deleted";
     public const string EventError    = "error";
+    public const string EventWarning  = "warning"; // 15-minute viewing-time alert
 
     private readonly AppSettings _settings;
     private readonly Action<string, string> _onEvent; // (eventType, message)
@@ -35,9 +36,6 @@ public sealed class PdfLifecycleManager : IDisposable
     // keeps them from reopening. A re-download changes the write time, so
     // genuinely new content is always processed.
     private readonly Dictionary<string, DateTime> _handled = new(StringComparer.OrdinalIgnoreCase);
-
-    // Pending language pairs waiting for their _SPA / _ENG counterpart
-    private readonly Dictionary<string, PairSlot> _languagePairs = new(StringComparer.OrdinalIgnoreCase);
 
     // Files whose deletion failed because something (Defender scan, OneDrive
     // sync, Edge) still holds them. Value = LastWriteTimeUtc when enqueued,
@@ -127,34 +125,23 @@ public sealed class PdfLifecycleManager : IDisposable
     // Returns true if the cycle completed (file opened or deliberately skipped);
     // false means the file vanished or never stabilized — no cooldown, so a
     // later event for the same path (the real download) is still processed.
+    // Full lifecycle: detect → wait for the download to finish → open in the
+    // built-in viewer → delete. Language filtering (when both _SPA and _ENG
+    // arrive) is handled inside the viewer, which opens every document and
+    // closes the non-matching window once both are visible.
     private bool RunLifecycle(string pdfPath, CancellationToken ct)
-    {
-        string lang = DetectLanguageSuffix(pdfPath);
-        bool filterApplies =
-            lang.Length > 0 && _settings.PreferredLanguage != LanguagePreference.Any;
-
-        // Built-in viewer: every PDF ALWAYS opens; once both language siblings
-        // are visible, the viewer itself closes the non-matching window. Edge
-        // tabs can't be closed programmatically, so for Edge the non-preferred
-        // file is filtered out before opening.
-        if (filterApplies && !_settings.UseBuiltInViewer)
-            return RunWithLanguageFilter(pdfPath, lang, ct);
-
-        return RunLifecycleDirect(pdfPath, ct);
-    }
-
-    // Full lifecycle for a single file with no language filtering involved.
-    private bool RunLifecycleDirect(string pdfPath, CancellationToken ct)
     {
         Notify(EventDetected, $"PDF detected: {Path.GetFileName(pdfPath)}");
 
         if (!WaitForStability(pdfPath, ct))
-            return false;
+            return false; // download never completed
 
         return OpenAndFinish(pdfPath, ct);
     }
 
-    // Open in Edge, block until the tab closes, then delete if configured.
+    // Opens the PDF in the built-in viewer, blocks until the window closes
+    // (by the user, by the language reconciler, or by the 20-minute limit),
+    // then deletes the file. Auto-delete is always on by design.
     private bool OpenAndFinish(string pdfPath, CancellationToken ct)
     {
         // The file may have been deleted between stabilization and now
@@ -162,107 +149,23 @@ public sealed class PdfLifecycleManager : IDisposable
         if (!File.Exists(pdfPath))
             return false;
 
-        bool viewed = false;
-        if (_settings.UseBuiltInViewer)
+        string lang      = DetectLanguageSuffix(pdfPath);
+        string preferred = _settings.PreferredLanguage == LanguagePreference.Any
+            ? "" : _settings.PreferredLanguage.ToString();
+
+        string? viewerError = UI.PdfViewerForm.ShowAndWait(
+            pdfPath, ct, GetPairingKey(pdfPath), GetDocumentKey(pdfPath), lang, preferred, Notify);
+
+        if (viewerError != null)
         {
-            string lang      = DetectLanguageSuffix(pdfPath);
-            string preferred = _settings.PreferredLanguage == LanguagePreference.Any
-                ? "" : _settings.PreferredLanguage.ToString();
-
-            string? viewerError = UI.PdfViewerForm.ShowAndWait(
-                pdfPath, ct, GetPairingKey(pdfPath), lang, preferred);
-
-            viewed = viewerError == null;
-            if (!viewed)
-                Notify(EventError, $"Built-in viewer failed → {viewerError}. Opening in Edge.");
+            // No Edge fallback by design. Keep the file so it can be opened
+            // manually; report the error so the failure is not silent.
+            Notify(EventError, $"No se pudo abrir el visor: {viewerError}");
+            return true; // completed (avoids a retry storm)
         }
-
-        // Edge path: default, or fallback when the built-in viewer can't start
-        if (!viewed)
-            new EdgeManager(_settings.EdgePath).OpenAndWaitForClose(pdfPath, ct);
 
         Notify(EventOpened, $"Opened: {Path.GetFileName(pdfPath)}");
-
-        if (_settings.AutoDelete)
-            DeleteWithDuplicates(pdfPath);
-
-        return true;
-    }
-
-    // Language filtering with zero added latency for the preferred language:
-    //   • Preferred file  → opens immediately and signals its counterpart to stand down.
-    //   • Non-preferred   → opens immediately UNLESS the preferred counterpart is part
-    //     of the same download burst (signaled by its task, or already on disk);
-    //     if uncertain it waits at most 1.2s and then opens anyway (fallback).
-    private bool RunWithLanguageFilter(string pdfPath, string lang, CancellationToken ct)
-    {
-        string name = Path.GetFileName(pdfPath);
-        Notify(EventDetected, $"PDF detected: {name}");
-
-        if (!WaitForStability(pdfPath, ct))
-            return false; // download never completed
-
-        string pairingKey  = GetPairingKey(pdfPath);
-        string preferred   = _settings.PreferredLanguage.ToString(); // "SPA" / "ENG"
-        bool   isPreferred = lang.Equals(preferred, StringComparison.OrdinalIgnoreCase);
-
-        PairSlot slot;
-        lock (_lock)
-        {
-            // Purge stale slots so the dictionary doesn't grow forever
-            foreach (var stale in _languagePairs
-                         .Where(p => (DateTime.UtcNow - p.Value.Created).TotalSeconds > 60)
-                         .Select(p => p.Key).ToList())
-                _languagePairs.Remove(stale);
-
-            if (!_languagePairs.TryGetValue(pairingKey, out slot!) ||
-                (DateTime.UtcNow - slot.Created).TotalSeconds > 15)
-            {
-                slot = new PairSlot();
-                _languagePairs[pairingKey] = slot;
-            }
-        }
-
-        if (isPreferred)
-        {
-            // Preferred language never waits.
-            slot.PreferredArrived.Set();
-            return OpenAndFinish(pdfPath, ct);
-        }
-
-        // Non-preferred: skip only if the preferred counterpart belongs to the
-        // same burst. Disk check catches it even before its own task signals.
-        bool preferredHere =
-            slot.PreferredArrived.IsSet ||
-            PreferredCounterpartOnDisk(pdfPath, preferred) ||
-            slot.PreferredArrived.Wait(1200, ct) ||
-            PreferredCounterpartOnDisk(pdfPath, preferred);
-
-        if (!preferredHere)
-        {
-            // Solo download — open regardless of language preference.
-            return OpenAndFinish(pdfPath, ct);
-        }
-
-        Notify(EventDetected, $"Skipped (language filter): {name}");
-        if (_settings.AutoDelete)
-        {
-            // Deleting immediately races Edge/Defender's post-download virus
-            // scan and makes Edge report "virus scan failed" on the download.
-            // The file is never shown to the user, so this delay is invisible.
-            DateTime stamp = SafeLastWriteUtc(pdfPath);
-
-            if (ct.WaitHandle.WaitOne(3000))
-                return true; // app shutting down
-
-            // If the file changed during the wait, a new download overwrote
-            // this path — process it as a fresh arrival instead of deleting it.
-            if (SafeLastWriteUtc(pdfPath) != stamp)
-                return RunLifecycle(pdfPath, ct);
-
-            TryDeleteFile(pdfPath);
-        }
-
+        DeleteWithDuplicates(pdfPath);
         return true;
     }
 
@@ -270,36 +173,6 @@ public sealed class PdfLifecycleManager : IDisposable
     {
         try { return File.GetLastWriteTimeUtc(path); }
         catch { return DateTime.MinValue; }
-    }
-
-    // True if a *recently downloaded* preferred-language counterpart of this
-    // file exists in the same folder. Recency (30s) avoids matching leftovers
-    // from older downloads when auto-delete is off.
-    private static bool PreferredCounterpartOnDisk(string pdfPath, string preferredLang)
-    {
-        try
-        {
-            string dir = Path.GetDirectoryName(pdfPath)!;
-            string key = GetPairingKey(pdfPath);
-
-            foreach (var file in Directory.GetFiles(dir, "*.pdf"))
-            {
-                if (file.Equals(pdfPath, StringComparison.OrdinalIgnoreCase))
-                    continue;
-                if (!DetectLanguageSuffix(file).Equals(preferredLang, StringComparison.OrdinalIgnoreCase))
-                    continue;
-                if (!GetPairingKey(file).Equals(key, StringComparison.Ordinal))
-                    continue;
-                // 0-byte placeholders don't count — they may never become real
-                if (new FileInfo(file).Length < 100)
-                    continue;
-                if ((DateTime.UtcNow - File.GetCreationTimeUtc(file)).TotalSeconds <= 30)
-                    return true;
-            }
-        }
-        catch { }
-
-        return false;
     }
 
     /// <summary>
@@ -425,6 +298,17 @@ public sealed class PdfLifecycleManager : IDisposable
         return Path.Combine(dir.ToUpperInvariant(), clean);
     }
 
+    // Document key: keeps the language but drops the browser duplicate suffix,
+    // so "doc.pdf", "doc (1).pdf" and "doc (2).pdf" all map to the same key.
+    // Used by the viewer to replace an open document with a freshly downloaded
+    // copy of the SAME document (same language) — the newest version wins.
+    private static string GetDocumentKey(string pdfPath)
+    {
+        string dir  = Path.GetDirectoryName(pdfPath) ?? "";
+        string stem = StripNumericSuffix(Path.GetFileNameWithoutExtension(pdfPath));
+        return Path.Combine(dir.ToUpperInvariant(), stem.ToUpperInvariant());
+    }
+
     // Deletes with growing retries (~9s total). Right after a download the
     // file is often locked by Defender's scan, OneDrive sync, or Edge itself.
     // If it is STILL locked after all attempts, it is handed to the janitor,
@@ -516,16 +400,5 @@ public sealed class PdfLifecycleManager : IDisposable
     {
         _cts.Cancel();
         _janitor.Dispose();
-    }
-
-    // ── Nested type ────────────────────────────────────────────────────────
-
-    // Shared coordination point for the two language variants of one document.
-    // The preferred-language task sets PreferredArrived; the non-preferred task
-    // checks/waits on it to decide whether to stand down.
-    private sealed class PairSlot
-    {
-        public readonly ManualResetEventSlim PreferredArrived = new(false);
-        public DateTime Created { get; } = DateTime.UtcNow;
     }
 }
