@@ -1,6 +1,6 @@
 @echo off
 REM ============================================================
-REM  PDF Auto Viewer (.NET 8) — Build script
+REM  Philips Document Flow (PDF) (.NET 8) — Build script
 REM ============================================================
 REM  Prerequisite: .NET 8 SDK
 REM    https://dotnet.microsoft.com/download/dotnet/8.0

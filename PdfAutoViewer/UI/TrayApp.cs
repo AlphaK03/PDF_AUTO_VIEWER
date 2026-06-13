@@ -40,16 +40,16 @@ public sealed class TrayApp : ApplicationContext
     private NotifyIcon BuildTrayIcon()
     {
         var menu = new ContextMenuStrip();
-        menu.Items.Add("● PDF Auto Viewer activo").Enabled = false;
+        menu.Items.Add("● Philips Document Flow (PDF) active").Enabled = false;
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add("Mostrar ventana", null, (_, _) => ShowStatusForm());
+        menu.Items.Add("Show window", null, (_, _) => ShowStatusForm());
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add("Salir",           null, (_, _) => Quit());
+        menu.Items.Add("Exit",        null, (_, _) => Quit());
 
         var icon = new NotifyIcon
         {
             Icon             = CreateTrayIcon(),
-            Text             = "PDF Auto Viewer",
+            Text             = "Philips Document Flow (PDF)",
             ContextMenuStrip = menu,
             Visible          = true,
         };
@@ -58,14 +58,14 @@ public sealed class TrayApp : ApplicationContext
         return icon;
     }
 
-    /// Draws a red icon with "PDF" text in memory — no external .ico file needed.
+    /// Draws a blue icon with "PDF" text in memory — no external .ico file needed.
     private static Icon CreateTrayIcon()
     {
         using var bmp = new Bitmap(32, 32);
         using var g   = Graphics.FromImage(bmp);
 
         g.Clear(Color.Transparent);
-        g.FillRectangle(new SolidBrush(Color.FromArgb(192, 30, 30)), 1, 1, 30, 30);
+        g.FillRectangle(new SolidBrush(Color.FromArgb(30, 90, 192)), 1, 1, 30, 30);
 
         using var font = new Font("Arial", 9f, FontStyle.Bold, GraphicsUnit.Pixel);
         var textSize = g.MeasureString("PDF", font);
@@ -94,14 +94,14 @@ public sealed class TrayApp : ApplicationContext
         // The 15-minute viewing-time warning is the only routine notification.
         if (type == PdfLifecycleManager.EventWarning)
         {
-            _tray.ShowBalloonTip(8000, "PDF Auto Viewer", message, ToolTipIcon.Warning);
+            _tray.ShowBalloonTip(8000, "Philips Document Flow (PDF)", message, ToolTipIcon.Warning);
             return;
         }
 
         // Errors are surfaced so that a failure to open is never silent.
         if (type == PdfLifecycleManager.EventError)
         {
-            _tray.ShowBalloonTip(5000, "Error — PDF Auto Viewer", message, ToolTipIcon.Error);
+            _tray.ShowBalloonTip(5000, "Error — Philips Document Flow (PDF)", message, ToolTipIcon.Error);
             return;
         }
 

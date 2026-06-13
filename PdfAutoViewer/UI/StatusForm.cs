@@ -36,7 +36,7 @@ public sealed class StatusForm : Form
     public void RefreshDisplay()
     {
         string folder = _settings.EffectiveWatchFolder;
-        _statusLabel.Text = "● ACTIVO";
+        _statusLabel.Text = "● ACTIVE";
         _folderLabel.Text = folder.Length > 50 ? "…" + folder[^48..] : folder;
     }
 
@@ -44,7 +44,9 @@ public sealed class StatusForm : Form
 
     private void BuildLayout()
     {
-        Text            = "PDF Auto Viewer";
+        Text            = "Philips Document Flow (PDF)";
+        // Window / taskbar icon: reuse the executable's embedded app.ico (blue "PDF").
+        Icon            = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
         ClientSize      = new Size(390, 232);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox     = false;
@@ -54,7 +56,7 @@ public sealed class StatusForm : Form
         // ── Header ────────────────────────────────────────────────────
         var titleLabel = new Label
         {
-            Text      = "PDF Auto Viewer",
+            Text      = "Philips Document Flow (PDF)",
             Font      = new Font("Segoe UI", 13f, FontStyle.Bold),
             ForeColor = Color.FromArgb(26, 26, 46),
             AutoSize  = true,
@@ -88,7 +90,7 @@ public sealed class StatusForm : Form
 
         var monitorLabel = new Label
         {
-            Text      = "Monitor de descargas",
+            Text      = "Downloads monitor",
             Font      = new Font("Segoe UI", 10f, FontStyle.Bold),
             ForeColor = Color.FromArgb(26, 26, 46),
             AutoSize  = true,
@@ -116,7 +118,7 @@ public sealed class StatusForm : Form
         // ── Language selector ─────────────────────────────────────────
         var langTitle = new Label
         {
-            Text      = "Idioma preferido",
+            Text      = "Preferred language",
             Font      = new Font("Segoe UI", 10f, FontStyle.Bold),
             ForeColor = Color.FromArgb(26, 26, 46),
             AutoSize  = true,
@@ -130,7 +132,7 @@ public sealed class StatusForm : Form
             DropDownStyle = ComboBoxStyle.DropDownList,
             Font          = new Font("Segoe UI", 9f),
         };
-        _langCombo.Items.AddRange(["Cualquiera (abrir ambos)", "Español (_SPA)", "English (_ENG)"]);
+        _langCombo.Items.AddRange(["Any (open both)", "Spanish (_SPA)", "English (_ENG)"]);
         _langCombo.SelectedIndex = _settings.PreferredLanguage switch
         {
             LanguagePreference.SPA => 1,
@@ -141,7 +143,7 @@ public sealed class StatusForm : Form
 
         var hint = new Label
         {
-            Text      = "Si se descargan ambos idiomas a la vez, se abre el preferido.",
+            Text      = "If both languages are downloaded at once, the preferred one opens.",
             Font      = new Font("Segoe UI", 8f),
             ForeColor = Color.Gray,
             AutoSize  = true,
@@ -158,7 +160,7 @@ public sealed class StatusForm : Form
         // ── Hide button ───────────────────────────────────────────────
         var hideBtn = new Button
         {
-            Text      = "Ocultar  ↓",
+            Text      = "Hide  ↓",
             Location  = new Point(294, 204),
             Size      = new Size(84, 24),
             FlatStyle = FlatStyle.Flat,

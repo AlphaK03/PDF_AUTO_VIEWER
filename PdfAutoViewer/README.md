@@ -1,4 +1,6 @@
-# PDF Auto Viewer
+# Philips Document Flow (PDF)
+
+> *Pop · Display · Flush* — the document appears, you read it, and it's gone.
 
 Windows desktop application that watches the user's Downloads folder and
 automatically opens downloaded work instructions (WI / MPI) in PDF format using
@@ -44,6 +46,32 @@ Designed to run unattended (24/7):
 
 ```bash
 dotnet run --project PdfAutoViewer/PdfAutoViewer.csproj
+```
+
+### Running from VS Code (local SDK, no admin)
+
+On corporate machines without administrator rights, the .NET 8 SDK can be
+installed per-user (under `%USERPROFILE%\.dotnet`) and called directly, without
+relying on a system-wide `dotnet` on the `PATH`. Use the VS Code integrated
+terminal (PowerShell), from the project root:
+
+```powershell
+# Run the application
+& "$env:USERPROFILE\.dotnet\dotnet.exe" run --project PdfAutoViewer
+
+# Run the tests
+& "$env:USERPROFILE\.dotnet\dotnet.exe" test PdfAutoViewer.Tests
+
+# Build the executable (.exe)
+& "$env:USERPROFILE\.dotnet\dotnet.exe" publish PdfAutoViewer/PdfAutoViewer.csproj -c Release -r win-x64 --self-contained false -o publish
+```
+
+Once `%USERPROFILE%\.dotnet` is on the user `PATH`, reopen VS Code and the short
+form works in any new terminal:
+
+```powershell
+dotnet run  --project PdfAutoViewer
+dotnet test PdfAutoViewer.Tests
 ```
 
 ## Build the executable (.exe)

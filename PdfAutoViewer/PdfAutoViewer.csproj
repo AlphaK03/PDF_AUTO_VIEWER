@@ -8,6 +8,12 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>PdfAutoViewer</AssemblyName>
     <RootNamespace>PdfAutoViewer</RootNamespace>
+    <!-- Nombre visible (propiedades del .exe); el AssemblyName se mantiene por compatibilidad. -->
+    <Product>Philips Document Flow (PDF)</Product>
+    <AssemblyTitle>Philips Document Flow (PDF)</AssemblyTitle>
+    <Company>Philips</Company>
+    <!-- Icono del ejecutable: fondo azul con el texto "PDF" -->
+    <ApplicationIcon>app.ico</ApplicationIcon>
     <!-- PerMonitorV2 makes the window sharp on high-DPI screens -->
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
   </PropertyGroup>

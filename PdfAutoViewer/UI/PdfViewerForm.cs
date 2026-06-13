@@ -263,8 +263,8 @@ public sealed class PdfViewerForm : Form
         {
             _warnTimer!.Stop();
             _notify?.Invoke(Core.PdfLifecycleManager.EventWarning,
-                $"El documento «{Path.GetFileName(_pdfPath)}» se cerrará en 5 minutos " +
-                "(límite de visualización de 20 minutos).");
+                $"“{Path.GetFileName(_pdfPath)}” will close in 5 minutes " +
+                "(20-minute viewing limit).");
         };
         _warnTimer.Start();
 

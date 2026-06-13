@@ -170,7 +170,7 @@ public sealed class PdfLifecycleManager : IDisposable
         {
             // No Edge fallback by design. Keep the file so it can be opened
             // manually; report the error so the failure is not silent.
-            Notify(EventError, $"No se pudo abrir el visor: {viewerError}");
+            Notify(EventError, $"Could not open the viewer: {viewerError}");
             return true; // completed (avoids a retry storm)
         }
 
