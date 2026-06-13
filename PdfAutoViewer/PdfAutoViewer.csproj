@@ -16,4 +16,9 @@
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4022.49" />
   </ItemGroup>
 
+  <!-- Expone los miembros internal al proyecto de pruebas (patrón estándar). -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="PdfAutoViewer.Tests" />
+  </ItemGroup>
+
 </Project>

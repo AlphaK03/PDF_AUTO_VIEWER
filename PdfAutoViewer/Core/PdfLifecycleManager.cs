@@ -284,12 +284,12 @@ public sealed class PdfLifecycleManager : IDisposable
     }
 
     // Removes the "(2)", "(3)" suffix that browsers add to duplicate downloads
-    private static string StripNumericSuffix(string stem) =>
+    internal static string StripNumericSuffix(string stem) =>
         Regex.Replace(stem, @"\s*\(\d+\)\s*$", "").Trim();
 
     // Returns "SPA", "ENG", or "" — matches _SPA/_ENG anywhere in the name,
     // requiring the token to be followed by _ , space, or end of stem.
-    private static string DetectLanguageSuffix(string pdfPath)
+    internal static string DetectLanguageSuffix(string pdfPath)
     {
         string stem = Path.GetFileNameWithoutExtension(pdfPath);
         if (Regex.IsMatch(stem, @"_SPA(?=[_\s]|$)", RegexOptions.IgnoreCase)) return "SPA";
@@ -299,7 +299,7 @@ public sealed class PdfLifecycleManager : IDisposable
 
     // Pairing key: removes the _SPA/_ENG token, normalizes separators, uppercases.
     // e.g. "D123_H_SPA_Report" and "D123_H_ENG Report" both yield "D123 H REPORT".
-    private static string GetPairingKey(string pdfPath)
+    internal static string GetPairingKey(string pdfPath)
     {
         string dir      = Path.GetDirectoryName(pdfPath) ?? "";
         string stem     = Path.GetFileNameWithoutExtension(pdfPath);
@@ -312,7 +312,7 @@ public sealed class PdfLifecycleManager : IDisposable
     // so "doc.pdf", "doc (1).pdf" and "doc (2).pdf" all map to the same key.
     // Used by the viewer to replace an open document with a freshly downloaded
     // copy of the SAME document (same language) — the newest version wins.
-    private static string GetDocumentKey(string pdfPath)
+    internal static string GetDocumentKey(string pdfPath)
     {
         string dir  = Path.GetDirectoryName(pdfPath) ?? "";
         string stem = StripNumericSuffix(Path.GetFileNameWithoutExtension(pdfPath));
