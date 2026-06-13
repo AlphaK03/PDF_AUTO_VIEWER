@@ -37,21 +37,39 @@ Pensada para ejecutarse de forma desatendida (24/7):
 - [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
 - WebView2 Runtime (incluido por defecto en Windows 11)
 
-## Compilar y ejecutar
+## Ejecutar la aplicación
 
 ```bash
-# Restaurar dependencias y ejecutar
 dotnet run --project PdfAutoViewer/PdfAutoViewer.csproj
+```
 
-# Compilar en modo Release
-dotnet build -c Release
+## Generar el ejecutable (.exe)
 
-# Publicar un ejecutable de un solo archivo
+```bash
 dotnet publish PdfAutoViewer/PdfAutoViewer.csproj -c Release -r win-x64 --self-contained false -o publish
 ```
 
+El ejecutable se genera en `publish\PdfAutoViewer.exe` (requiere el runtime de
+.NET 8 en el equipo destino). El script `publish.bat` ejecuta este mismo comando.
+
 También puede abrirse `PdfAutoViewer.sln` directamente en Visual Studio 2022 o
 JetBrains Rider.
+
+## Consideraciones de despliegue (Windows 10)
+
+El visor integrado depende del **runtime de WebView2**. En Windows 11 viene
+preinstalado; en **Windows 10 no está garantizado**, y como la aplicación no
+recurre a un visor alternativo, si el runtime falta el documento no se abrirá.
+Antes de desplegar en terminales Windows 10 se recomienda:
+
+- **Verificar que el WebView2 Runtime esté instalado**; si no, instalarlo
+  (Evergreen Standalone Installer) o empaquetar la versión *Fixed Version* junto
+  a la app para no depender del sistema.
+- **Publicar self-contained** (incluir el runtime de .NET en el ejecutable) para
+  no depender de que .NET 8 esté instalado. Requiere Windows 10 versión 1607 o
+  superior.
+- Tener presente que **Windows 10 alcanzó su fin de soporte en octubre de 2025**;
+  conviene confirmar el plan de actualizaciones (ESU o migración a Windows 11).
 
 ## Estructura
 
