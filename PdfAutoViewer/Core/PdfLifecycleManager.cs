@@ -110,7 +110,17 @@ public sealed class PdfLifecycleManager : IDisposable
                         _cooldown[key] = DateTime.UtcNow;
                         _handled[key]  = SafeLastWriteUtc(key);
 
-                        // Keep the map bounded: drop entries for deleted files
+                        // Bound growth for 24/7 operation. Cooldown entries are
+                        // only relevant for ~5s, so drop stale ones; handled
+                        // entries for files that no longer exist can also go.
+                        if (_cooldown.Count > 200)
+                        {
+                            var cutoff = DateTime.UtcNow.AddMinutes(-1);
+                            foreach (var k in _cooldown.Where(p => p.Value < cutoff)
+                                                       .Select(p => p.Key).ToList())
+                                _cooldown.Remove(k);
+                        }
+
                         if (_handled.Count > 500)
                             foreach (var k in _handled.Keys.Where(k => !File.Exists(k)).ToList())
                                 _handled.Remove(k);

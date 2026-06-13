@@ -17,6 +17,19 @@ idiomas, identificados por un sufijo en el nombre del archivo (`_SPA`, `_ENG`).
 - Cuando se descargan ambos idiomas a la vez, se abre el **idioma preferido**;
   si solo llega uno, se abre ese. El idioma preferido es la única opción
   configurable y se elige desde la ventana principal.
+- Si se descarga una **copia más reciente** del documento abierto, se reemplaza
+  por la versión nueva y se reinicia el límite de tiempo.
+
+## Operación continua
+
+Pensada para ejecutarse de forma desatendida (24/7):
+
+- **Instancia única por sesión de Windows**: evita copias duplicadas dentro de
+  una misma sesión, sin bloquear otras sesiones (VDI / multisesión).
+- **Registro de errores**: las excepciones no controladas se escriben en
+  `%LOCALAPPDATA%\PdfAutoViewer\app-error.log`; un error puntual no detiene la
+  aplicación.
+- Uso de memoria acotado en ejecución prolongada.
 
 ## Requisitos
 
@@ -48,7 +61,7 @@ PdfAutoViewer/
   Program.cs                   Punto de entrada
   PdfAutoViewer.csproj         Proyecto (.NET 8, Windows Forms)
   Core/                        Lógica: configuración, vigilancia, ciclo de vida
-  UI/                          Interfaz: bandeja, estado, configuración, visor
+  UI/                          Interfaz: bandeja, ventana de estado, visor
 ```
 
 ## Configuración
