@@ -23,3 +23,7 @@ WebView2/
 CLAUDE.md
 demo_assets/
 docs/
+# Excepción: sí versionar los manuales técnicos (LaTeX) de la aplicación.
+!PdfAutoViewer/docs/
+PdfAutoViewer/docs/*
+!PdfAutoViewer/docs/*.tex

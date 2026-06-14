@@ -4,11 +4,12 @@ namespace PdfAutoViewer.Core;
 
 /// <summary>
 /// Orchestrates the full lifecycle of each detected PDF:
-///   1. Detect  — notify the UI that a new PDF was found.
+///   1. Detect    — notify the UI that a new PDF was found.
 ///   2. Stabilize — wait for the file size to stop changing (download complete).
-///   3. Open    — open the PDF in Edge and notify the UI.
-///   4. Wait    — block until the user closes the Edge tab.
-///   5. Delete  — if auto-delete is enabled, remove the PDF (and browser duplicates).
+///   3. Open      — open the PDF in the built-in viewer and notify the UI.
+///   4. Wait      — block until the viewer window closes (user, language filter,
+///                  or the 20-minute viewing limit).
+///   5. Delete    — remove the PDF and any browser-generated duplicate copies.
 ///
 /// Each PDF runs in its own background Task so multiple simultaneous downloads
 /// are handled independently without blocking each other.

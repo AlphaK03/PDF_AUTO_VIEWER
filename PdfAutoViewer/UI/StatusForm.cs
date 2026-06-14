@@ -63,9 +63,12 @@ public sealed class StatusForm : Form
             Location  = new Point(14, 14),
         };
 
+        // Version is read from the assembly so it has a single source of truth
+        // (defined as <Version> in the .csproj).
+        var appVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
         var versionLabel = new Label
         {
-            Text      = "v2.0",
+            Text      = $"v{appVersion!.Major}.{appVersion.Minor}",
             Font      = new Font("Segoe UI", 9f),
             ForeColor = Color.Silver,
             AutoSize  = true,

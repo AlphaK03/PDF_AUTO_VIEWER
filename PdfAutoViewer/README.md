@@ -2,6 +2,10 @@
 
 > *Pop · Display · Flush* — the document appears, you read it, and it's gone.
 
+**Version 2.1.0** · For full architecture, deployment and maintenance details see
+the technical manual (LaTeX): [English](docs/Technical_Manual.tex) ·
+[Español](docs/Manual_Tecnico.tex).
+
 Windows desktop application that watches the user's Downloads folder and
 automatically opens downloaded work instructions (WI / MPI) in PDF format using
 a built-in viewer. When the document is closed it is deleted automatically to

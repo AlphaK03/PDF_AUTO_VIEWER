@@ -1,0 +1,575 @@
+\documentclass[11pt,a4paper]{article}
+
+% ----------------------------------------------------------------------
+%  Philips Document Flow (PDF) - Manual Tecnico
+%  Compila en Overleaf con pdfLaTeX (motor por defecto).
+% ----------------------------------------------------------------------
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish,es-noshorthands]{babel}
+\usepackage{lmodern}
+\usepackage[a4paper,margin=2.5cm]{geometry}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{ragged2e}
+\usepackage{tabularx}
+\usepackage{xltabular}
+\usepackage{enumitem}
+\usepackage{listings}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning}
+\usepackage[hidelinks]{hyperref}
+
+% ---- Paleta sobria (texto siempre en negro) --------------------------
+\definecolor{codebg}{RGB}{246,247,248}
+\definecolor{linegray}{RGB}{200,205,210}
+\definecolor{headgray}{RGB}{238,240,242}
+\color{black}
+
+% ---- Estilo de codigo (monocromo, texto negro) -----------------------
+\lstdefinestyle{code}{
+  basicstyle=\ttfamily\small\color{black},
+  backgroundcolor=\color{codebg},
+  frame=single,
+  rulecolor=\color{linegray},
+  breaklines=true,
+  showstringspaces=false,
+  columns=fullflexible,
+  keepspaces=true,
+  captionpos=b,
+  xleftmargin=6pt,
+  xrightmargin=6pt,
+  aboveskip=10pt,
+  belowskip=6pt,
+}
+\lstset{style=code}
+
+% ---- Columnas de tabla que ajustan y NO se solapan -------------------
+% L = columna flexible con texto alineado a la izquierda y ajuste de linea.
+\newcolumntype{L}{>{\RaggedRight\arraybackslash}X}
+\newcolumntype{C}{>{\Centering\arraybackslash}X}
+
+% ---- Encabezado y pie ------------------------------------------------
+\pagestyle{fancy}
+\fancyhf{}
+\setlength{\headheight}{14pt}
+\fancyhead[L]{\small\itshape Philips Document Flow (PDF) --- Manual Técnico}
+\fancyhead[R]{\small\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% ---- Formato de titulos (negro, con linea fina) ----------------------
+\titleformat{\section}
+  {\Large\bfseries\color{black}}{\thesection}{0.6em}{}[\vspace{1pt}{\color{linegray}\titlerule}]
+\titleformat{\subsection}{\large\bfseries\color{black}}{\thesubsection}{0.6em}{}
+\titlespacing*{\section}{0pt}{16pt}{8pt}
+
+% ---- Macros ----------------------------------------------------------
+% Backslash con punto de corte de linea, para rutas largas en tablas.
+\newcommand{\bs}{\textbackslash\allowbreak}
+\newcommand{\ruta}[1]{\texttt{\small #1}}
+
+\setlength{\parskip}{4pt}
+\setlength{\parindent}{0pt}
+
+\begin{document}
+
+% ======================================================================
+%  PORTADA
+% ======================================================================
+\begin{titlepage}
+\centering
+\vspace*{3cm}
+{\color{black}\rule{\textwidth}{1.2pt}}\\[0.8cm]
+{\Huge\bfseries Philips Document Flow (PDF)}\\[0.5cm]
+{\LARGE Manual Técnico}\\[0.4cm]
+{\color{black}\rule{\textwidth}{1.2pt}}\\[2cm]
+
+{\large Aplicación de escritorio para la apertura automática de\\
+documentos PDF descargados (instrucciones de trabajo WI / MPI)}\\[3cm]
+
+\begin{tabular}{@{}r l@{}}
+\textbf{Plataforma} & Microsoft Windows 10 / 11 (x64) \\[5pt]
+\textbf{Tecnología} & .NET 8 --- Windows Forms (C\#) \\[5pt]
+\textbf{Motor de visualización} & Microsoft WebView2 (Chromium) \\[5pt]
+\textbf{Versión de la aplicación} & 2.1.0 \\[5pt]
+\textbf{Fecha} & Junio de 2026 \\
+\end{tabular}
+
+\vfill
+\end{titlepage}
+
+% ======================================================================
+\tableofcontents
+\newpage
+
+% ======================================================================
+\section{Introducción}
+% ======================================================================
+PDF Auto Viewer es una aplicación de escritorio para Windows que automatiza la
+visualización de documentos PDF descargados. Se ejecuta de forma silenciosa en
+la bandeja del sistema y vigila la carpeta de descargas del usuario; cuando
+aparece un documento nuevo lo abre en un visor integrado y, una vez que el
+usuario termina de consultarlo, lo elimina automáticamente para mantener la
+carpeta limpia.
+
+La aplicación está orientada a entornos donde los documentos pueden distribuirse
+en dos idiomas, identificados por un sufijo en el nombre del archivo:
+
+\begin{itemize}[leftmargin=1.4em,itemsep=2pt]
+  \item \texttt{\_SPA} --- documento en español.
+  \item \texttt{\_ENG} --- documento en inglés.
+\end{itemize}
+
+El diseño es deliberadamente acotado: el sistema se limita a \textbf{vigilar},
+\textbf{abrir}, \textbf{cerrar tras el uso} y \textbf{eliminar} los documentos.
+No realiza ninguna otra acción sobre el equipo ni sobre los datos del usuario.
+
+% ======================================================================
+\section{Características principales}
+% ======================================================================
+\begin{itemize}[leftmargin=1.4em,itemsep=3pt]
+  \item Apertura automática de los PDF descargados, sin intervención del usuario.
+  \item Visor integrado propio basado en el motor WebView2 (Chromium).
+  \item Eliminación automática del documento al cerrarse.
+  \item Límite de visualización de 20 minutos, con un aviso previo a los 15.
+  \item Reemplazo automático de un documento por su copia más reciente.
+  \item Filtro de idioma configurable cuando se descargan ambas versiones.
+  \item Detección robusta de descargas mediante eventos del sistema de archivos
+        y una reexploración periódica de respaldo.
+  \item Identidad visual propia: icono azul con el texto «PDF» aplicado al
+        ejecutable, a la ventana, a la barra de tareas y a la bandeja del sistema.
+  \item Interfaz de usuario en inglés, como estándar para su uso en distintas
+        plantas.
+\end{itemize}
+
+% ======================================================================
+\section{Arquitectura del sistema}
+% ======================================================================
+La aplicación se organiza en dos capas: una capa de lógica (\texttt{Core}) y una
+capa de interfaz de usuario (\texttt{UI}). No existe una ventana principal
+permanente; el punto de permanencia de la aplicación es el icono de la bandeja
+del sistema.
+
+\vspace{0.4cm}
+\begin{center}
+\begin{tikzpicture}[
+  node distance=0.85cm and 1.25cm,
+  every node/.style={font=\small},
+  comp/.style={rectangle, rounded corners, draw=black, fill=white,
+               text width=3.1cm, align=center, minimum height=1.0cm},
+  ext/.style={rectangle, draw=black, dashed, fill=white, text width=2.7cm,
+              align=center, minimum height=1.0cm},
+  arr/.style={-{Stealth[length=2.4mm]}, thick}
+]
+\node[ext]  (fs)   {Carpeta de descargas};
+\node[comp] (mon)  [right=of fs]  {FolderMonitor\\[2pt]\footnotesize vigilancia};
+\node[comp] (life) [right=of mon] {PdfLifecycleManager\\[2pt]\footnotesize orquestación};
+\node[comp] (view) [right=of life]{PdfViewerForm\\[2pt]\footnotesize visor (WebView2)};
+\node[comp] (tray) [below=1.3cm of mon] {TrayApp\\[2pt]\footnotesize bandeja};
+\node[comp] (set)  [left=of tray] {AppSettings\\[2pt]\footnotesize configuración};
+
+\draw[arr] (fs)   -- (mon);
+\draw[arr] (mon)  -- (life);
+\draw[arr] (life) -- (view);
+\draw[arr] (set)  -- (tray);
+\draw[arr] (tray) -- (mon);
+\draw[arr] (life) to[bend right=18] node[midway,below,font=\footnotesize]{eventos} (tray);
+\end{tikzpicture}
+\end{center}
+\vspace{0.3cm}
+
+\begin{xltabular}{\textwidth}{@{} >{\bfseries}p{5.1cm} L @{}}
+\toprule
+\normalfont\textbf{Componente} & \textbf{Responsabilidad} \\
+\midrule
+\endfirsthead
+\toprule
+\normalfont\textbf{Componente} & \textbf{Responsabilidad} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+Program & Punto de entrada. Inicializa el contexto de aplicación. \\
+TrayApp & Mantiene viva la aplicación a través del icono de bandeja y conecta los componentes entre sí. \\
+AppSettings & Carga y guarda la configuración del usuario en formato JSON. \\
+FolderMonitor & Detecta la aparición de nuevos archivos PDF en la carpeta vigilada. \\
+PdfLifecycleManager & Orquesta el ciclo de vida completo de cada documento detectado. \\
+PdfViewerForm & Visor integrado basado en WebView2; muestra el PDF y controla su cierre. \\
+StatusForm & Ventana principal: estado del monitor y selección de idioma. \\
+\bottomrule
+\end{xltabular}
+
+% ======================================================================
+\section{Flujo de procesamiento}
+% ======================================================================
+Cada documento detectado se procesa en una tarea en segundo plano independiente,
+de modo que varias descargas simultáneas no se bloquean entre sí. El ciclo consta
+de las siguientes etapas:
+
+\begin{enumerate}[leftmargin=1.6em,itemsep=3pt]
+  \item \textbf{Detección.} La carpeta vigilada notifica la aparición de un
+        archivo con extensión \texttt{.pdf}.
+  \item \textbf{Estabilización.} La aplicación espera a que el navegador termine
+        de escribir el archivo, comprobando que el tamaño se mantenga estable y
+        que ningún proceso conserve un bloqueo de escritura.
+  \item \textbf{Apertura.} El documento se abre en el visor integrado.
+  \item \textbf{Espera.} El ciclo se bloquea hasta que la ventana se cierra, ya
+        sea por el usuario, por el reemplazo de una copia más reciente, por el
+        filtro de idioma o por el límite de 20 minutos.
+  \item \textbf{Eliminación.} El archivo se elimina de forma segura.
+\end{enumerate}
+
+\subsection{Control de duplicados y reprocesamiento}
+La aplicación mantiene varias estructuras en memoria para garantizar que cada
+documento se procese una sola vez y que no se pierda ninguna descarga:
+
+\begin{itemize}[leftmargin=1.4em,itemsep=2pt]
+  \item \textbf{En proceso:} rutas que se están procesando en ese momento.
+  \item \textbf{Enfriamiento:} rutas finalizadas recientemente, para ignorar
+        eventos tardíos del sistema de archivos.
+  \item \textbf{Procesados:} rutas ya atendidas junto con su fecha de
+        modificación, para no reabrir un documento que no ha cambiado.
+\end{itemize}
+
+% ======================================================================
+\section{Detección de descargas}
+% ======================================================================
+La detección de archivos nuevos combina dos mecanismos complementarios que, en
+conjunto, garantizan que ningún documento quede sin abrirse.
+
+\subsection{Eventos del sistema de archivos}
+El componente \texttt{FolderMonitor} utiliza la clase estándar
+\texttt{FileSystemWatcher} de .NET, que notifica de forma inmediata la creación y
+el renombrado de archivos. Los navegadores descargan a un archivo temporal (por
+ejemplo \texttt{.crdownload}) y lo renombran a \texttt{.pdf} al completar la
+descarga; ambos casos se detectan.
+
+\subsection{Reexploración periódica de respaldo}
+Como red de seguridad ante eventos perdidos (desbordamiento del búfer del sistema
+o condiciones de carrera de los navegadores), un temporizador reexplora la
+carpeta cada tres segundos y vuelve a considerar cualquier PDF modificado en los
+últimos tres minutos. La memoria de documentos ya procesados evita que un
+archivo abierto se vuelva a abrir.
+
+% ======================================================================
+\section{Visor integrado}
+% ======================================================================
+Los documentos se abren siempre en un visor propio basado en \textbf{Microsoft
+WebView2}, el motor de renderizado de PDF de Chromium distribuido con Windows.
+El visor presenta las siguientes características:
+
+\begin{itemize}[leftmargin=1.4em,itemsep=2pt]
+  \item Carga exclusivamente rutas locales mediante el esquema \texttt{file://};
+        no navega a direcciones de Internet.
+  \item Detección de cierre exacta a través del evento de cierre de la propia
+        ventana.
+  \item Apertura rápida: un proceso de WebView2 se mantiene preparado en segundo
+        plano para que cada documento se abra sin la demora de un arranque en
+        frío.
+  \item Cada ventana se ejecuta en su propio hilo, lo que permite mostrar varios
+        documentos de forma independiente.
+\end{itemize}
+
+% ======================================================================
+\section{Filtrado por idioma}
+% ======================================================================
+El nombre del archivo determina su idioma mediante los sufijos \texttt{\_SPA} y
+\texttt{\_ENG}. El comportamiento depende de cuántos documentos se descarguen y
+de la preferencia configurada.
+
+\begin{xltabular}{\textwidth}{@{} L L @{}}
+\toprule
+\textbf{Situación} & \textbf{Comportamiento} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Situación} & \textbf{Comportamiento} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+Un único documento (con o sin sufijo de idioma) & Se abre siempre. \\
+Dos documentos, sin idioma preferido & Se abren ambos. \\
+Dos documentos, con idioma preferido & Se abren ambos y, una vez visibles, se cierra automáticamente el que no coincide; permanece el del idioma preferido. \\
+\bottomrule
+\end{xltabular}
+
+\subsection{Emparejamiento de documentos}
+Dos archivos se consideran el mismo documento en distinto idioma cuando, al
+retirar el sufijo de idioma y normalizar los separadores, comparten el mismo
+nombre base. Por ejemplo, \texttt{D000\_H\_SPA\_Reporte} y
+\texttt{D000\_H\_ENG Reporte} se emparejan correctamente.
+
+% ======================================================================
+\section{Reemplazo por copia más reciente}
+% ======================================================================
+Si un documento ya está abierto y el usuario descarga una copia más reciente del
+mismo documento y en el mismo idioma (por ejemplo \texttt{reporte (1).pdf}
+mientras \texttt{reporte.pdf} está en pantalla), la aplicación cierra la ventana
+de la copia anterior y muestra la nueva. De este modo el operador siempre
+visualiza la versión más reciente.
+
+Dado que la copia nueva se abre en una ventana nueva, el límite de visualización
+de 20 minutos se reinicia automáticamente. La copia anterior se elimina al
+cerrarse, mientras que la copia en uso queda protegida frente a esa eliminación.
+
+% ======================================================================
+\section{Límite de tiempo de visualización}
+% ======================================================================
+Cada documento puede permanecer abierto un máximo de \textbf{20 minutos}. El
+control es el siguiente:
+
+\begin{itemize}[leftmargin=1.4em,itemsep=2pt]
+  \item A los \textbf{15 minutos} se muestra una notificación que advierte que el
+        documento se cerrará en 5 minutos.
+  \item A los \textbf{20 minutos} la ventana se cierra automáticamente y el
+        documento se elimina como en cualquier cierre.
+\end{itemize}
+
+Esta notificación de tiempo es la única notificación de rutina que genera la
+aplicación.
+
+% ======================================================================
+\section{Eliminación de archivos}
+% ======================================================================
+La eliminación se limita exclusivamente a la carpeta vigilada y se ejecuta tras
+el cierre de cada documento. El proceso contempla los bloqueos temporales
+habituales (análisis antivirus, sincronización de carpetas, uso del propio
+visor):
+
+\begin{itemize}[leftmargin=1.4em,itemsep=2pt]
+  \item \textbf{Reintentos inmediatos:} cada eliminación se reintenta en
+        intervalos crecientes durante unos nueve segundos.
+  \item \textbf{Limpieza en segundo plano:} si el archivo sigue bloqueado, se
+        registra en una lista de pendientes que se reintenta periódicamente hasta
+        completarse; ningún archivo queda sin eliminar de forma silenciosa.
+  \item \textbf{Protección ante redescarga:} si un archivo pendiente cambia
+        (porque se volvió a descargar), se descarta de la lista y se procesa como
+        un documento nuevo, evitando borrar contenido vigente.
+\end{itemize}
+
+Adicionalmente, la aplicación reconoce las copias duplicadas que generan los
+navegadores (por ejemplo, \texttt{documento (2).pdf}) y las incluye en la
+limpieza del documento correspondiente.
+
+% ======================================================================
+\section{Configuración}
+% ======================================================================
+La única opción configurable por el usuario es el \textbf{idioma preferido}, que
+se selecciona desde la ventana principal de la aplicación. El resto del
+comportamiento es fijo por diseño: la carpeta vigilada, el uso del visor
+integrado, la eliminación automática y el límite de 20 minutos.
+
+La configuración se guarda en formato JSON, en texto legible:
+
+\begin{lstlisting}[caption={Ejemplo de settings.json.}]
+{
+  "PreferredLanguage": "SPA"
+}
+\end{lstlisting}
+
+Si el archivo no existe o está dañado, la aplicación utiliza valores
+predeterminados seguros.
+
+\begin{xltabular}{\textwidth}{@{} >{\bfseries}p{3.4cm} p{2.2cm} L @{}}
+\toprule
+\normalfont\textbf{Parámetro} & \textbf{Valores} & \textbf{Descripción} \\
+\midrule
+\endfirsthead
+\toprule
+\normalfont\textbf{Parámetro} & \textbf{Valores} & \textbf{Descripción} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+PreferredLanguage & Any, SPA, ENG & Idioma que se abre cuando se descargan ambas versiones a la vez. \texttt{Any} abre ambos. \\
+\bottomrule
+\end{xltabular}
+
+% ======================================================================
+\section{Almacenamiento de datos}
+% ======================================================================
+La aplicación almacena sus datos en la carpeta local del usuario, sin afectar a
+otros usuarios del equipo.
+
+\begin{xltabular}{\textwidth}{@{} L p{4.2cm} @{}}
+\toprule
+\textbf{Ruta} & \textbf{Contenido} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Ruta} & \textbf{Contenido} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\ruta{\%LOCALAPPDATA\%\bs PdfAutoViewer\bs settings.json} & Configuración del usuario. \\
+\ruta{\%LOCALAPPDATA\%\bs PdfAutoViewer\bs WebView2\bs} & Datos de trabajo del visor integrado. \\
+\ruta{\%LOCALAPPDATA\%\bs PdfAutoViewer\bs viewer-error.log} & Registro de diagnóstico del visor, si procede. \\
+\ruta{\%LOCALAPPDATA\%\bs PdfAutoViewer\bs app-error.log} & Registro de excepciones no controladas, si procede. \\
+\bottomrule
+\end{xltabular}
+
+% ======================================================================
+\section{Requisitos del sistema}
+% ======================================================================
+\begin{itemize}[leftmargin=1.4em,itemsep=2pt]
+  \item Microsoft Windows 10 o 11 (64 bits).
+  \item .NET 8 Desktop Runtime.
+  \item WebView2 Runtime (incluido de forma predeterminada en Windows 11).
+\end{itemize}
+
+% ======================================================================
+\section{Compilación y ejecución}
+% ======================================================================
+El proyecto se compila con el SDK de .NET 8.
+
+\begin{lstlisting}[caption={Compilación y ejecución.}]
+# Ejecutar en modo desarrollo
+dotnet run --project PdfAutoViewer/PdfAutoViewer.csproj
+
+# Compilar en modo Release
+dotnet build -c Release
+
+# Publicar un ejecutable de un solo archivo
+dotnet publish PdfAutoViewer/PdfAutoViewer.csproj -c Release ^
+       -r win-x64 --self-contained false -o publish
+\end{lstlisting}
+
+También puede abrirse la solución \texttt{PdfAutoViewer.sln} en Visual Studio
+2022 o JetBrains Rider.
+
+\subsection{Instalación del SDK sin privilegios de administrador}
+En equipos corporativos sin permisos de administrador, el SDK de .NET 8 puede
+instalarse por usuario, en \ruta{\%USERPROFILE\%\bs.dotnet}, y utilizarse con su
+ruta completa. Desde la terminal integrada de Visual Studio Code (PowerShell), en
+la raíz del proyecto:
+
+\begin{lstlisting}[caption={Ejecución con un SDK local (sin administrador).}]
+& "$env:USERPROFILE\.dotnet\dotnet.exe" run --project PdfAutoViewer
+& "$env:USERPROFILE\.dotnet\dotnet.exe" test PdfAutoViewer.Tests
+\end{lstlisting}
+
+\subsection{Versionado}
+La versión de la aplicación se define una sola vez en el archivo de proyecto
+(\texttt{PdfAutoViewer.csproj}, etiqueta \texttt{<Version>}) y la ventana de
+estado la lee en tiempo de ejecución desde el ensamblado. Para publicar una nueva
+versión basta con actualizar ese valor; no es necesario modificar el código.
+
+La aplicación admite una sola instancia por sesión de Windows: si ya hay una
+copia en ejecución en la misma sesión, un nuevo lanzamiento se cierra de
+inmediato. En entornos de varias sesiones (VDI o multisesión), cada sesión
+ejecuta su propia instancia de forma independiente.
+
+% ======================================================================
+\section{Dependencias}
+% ======================================================================
+\begin{xltabular}{\textwidth}{@{} >{\bfseries}p{5.2cm} p{2.4cm} L @{}}
+\toprule
+\normalfont\textbf{Dependencia} & \textbf{Versión} & \textbf{Función} \\
+\midrule
+\endfirsthead
+\toprule
+\normalfont\textbf{Dependencia} & \textbf{Versión} & \textbf{Función} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+.NET (Windows Desktop) & 8.0 & Plataforma de ejecución. \\
+Windows Forms & 8.0 & Interfaz de usuario. \\
+Microsoft.Web.WebView2 & 1.0.x & Motor del visor integrado. \\
+WebView2 Runtime & Sistema & Componente del sistema operativo. \\
+\bottomrule
+\end{xltabular}
+
+La única dependencia externa de paquetes es \texttt{Microsoft.Web.WebView2};
+todas las dependencias son componentes oficiales de Microsoft.
+
+% ======================================================================
+\section{Seguridad y privacidad}
+% ======================================================================
+La aplicación \textbf{no establece conexiones de red}. No incorpora bibliotecas
+de cliente HTTP ni mecanismos de telemetría, y el visor integrado carga
+únicamente archivos locales mediante el esquema \texttt{file://}. No recopila,
+almacena ni transmite información del usuario ni el contenido de los documentos;
+de cada archivo solo se consultan su nombre y su tamaño.
+
+La siguiente tabla enumera los recursos del sistema operativo que utiliza la
+aplicación, con su nivel de acceso.
+
+\begin{xltabular}{\textwidth}{@{} >{\bfseries}p{4.3cm} p{2.8cm} L @{}}
+\toprule
+\normalfont\textbf{Recurso} & \textbf{Acceso} & \textbf{Uso} \\
+\midrule
+\endfirsthead
+\toprule
+\normalfont\textbf{Recurso} & \textbf{Acceso} & \textbf{Uso} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+Registro de Windows & Lectura & Resolución de la ruta de la carpeta de descargas del usuario. \\
+Carpeta vigilada & Lectura / Eliminación & Detección de PDF, lectura de tamaño y eliminación tras el uso. \\
+Carpeta de datos de la app & Lectura / Escritura & Configuración y datos de trabajo de WebView2. \\
+Procesos & Indirecto & El motor WebView2 ejecuta el renderizado del PDF en procesos propios gestionados por su runtime. \\
+Red & Ninguno & La aplicación no realiza conexiones de red. \\
+\bottomrule
+\end{xltabular}
+
+Se ejecuta con los privilegios del usuario que la inicia; no requiere elevación
+de administrador, no instala servicios ni controladores y no modifica
+configuraciones del sistema. Sus operaciones de archivo se limitan a la carpeta
+vigilada y a su propia carpeta de datos.
+
+% ======================================================================
+\section{Manejo de errores y registro}
+% ======================================================================
+La aplicación está diseñada para degradar de forma controlada:
+
+\begin{itemize}[leftmargin=1.4em,itemsep=2pt]
+  \item Si una eliminación falla por un bloqueo temporal, se reintenta en segundo
+        plano sin interrumpir la operación.
+  \item Los errores relevantes se comunican mediante un aviso en la bandeja del
+        sistema, de modo que un fallo no pase inadvertido.
+  \item El visor registra los fallos de inicialización en un archivo de
+        diagnóstico local para facilitar el soporte.
+  \item Las excepciones no controladas se registran en un archivo de diagnóstico
+        local; las del hilo de interfaz se capturan para que un error puntual no
+        detenga la aplicación.
+\end{itemize}
+
+% ======================================================================
+\section{Limitaciones conocidas}
+% ======================================================================
+\begin{itemize}[leftmargin=1.4em,itemsep=3pt]
+  \item El filtrado por idioma solo se activa cuando ambas versiones se descargan
+        de forma prácticamente simultánea; descargas separadas en el tiempo se
+        tratan como documentos independientes.
+  \item El reemplazo por copia más reciente aplica a documentos del mismo idioma;
+        una versión en otro idioma se gestiona mediante el filtro de idioma.
+\end{itemize}
+
+% ======================================================================
+\section{Historial de versiones}
+% ======================================================================
+\begin{xltabular}{\textwidth}{@{} p{1.8cm} p{2.6cm} L @{}}
+\toprule
+\textbf{Versión} & \textbf{Fecha} & \textbf{Cambios} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Versión} & \textbf{Fecha} & \textbf{Cambios} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+2.1.0 & Junio de 2026 & Identidad de marca «Philips Document Flow (PDF)»; icono azul con el texto «PDF» en el ejecutable, la ventana y la bandeja; interfaz totalmente en inglés; versión leída del ensamblado; manual técnico en español e inglés. \\
+2.0 & --- & Visor integrado único (WebView2); configuración mínima; límite de visualización de 20 minutos; robustez para operación continua. \\
+\bottomrule
+\end{xltabular}
+
+\end{document}

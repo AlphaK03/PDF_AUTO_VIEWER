@@ -14,9 +14,10 @@ namespace PdfAutoViewer.UI;
 ///
 /// Reliability rules (a PDF must ALWAYS open):
 ///   • LoadFailed is set ONLY when WebView2 cannot initialize at all (runtime
-///     missing/broken) or init times out — then the caller falls back to Edge.
+///     missing/broken) or init times out — then the lifecycle keeps the file
+///     and reports the error (there is NO Edge fallback by design).
 ///     Navigation success is NOT gated: rendering a local PDF with the runtime
-///     present always works, and gating on it caused false fallbacks.
+///     present always works, and gating on it caused false failures.
 ///   • ONE shared CoreWebView2Environment for every window; a prewarmed hidden
 ///     instance keeps the browser process alive so each viewer opens fast.
 ///
@@ -46,7 +47,8 @@ public sealed class PdfViewerForm : Form
     private System.Windows.Forms.Timer? _warnTimer;
     private System.Windows.Forms.Timer? _closeTimer;
 
-    /// True if WebView2 failed to initialize; the caller falls back to Edge.
+    /// True if WebView2 failed to initialize; the lifecycle then keeps the file
+    /// and reports the error (no Edge fallback by design).
     public bool LoadFailed { get; private set; }
 
     /// Human-readable reason for a failed init (null when it worked).
@@ -290,9 +292,10 @@ public sealed class PdfViewerForm : Form
 
     /// <summary>
     /// Shows the viewer and blocks the calling (background) thread until the
-    /// window is closed — either by the user or by the language reconciler.
-    /// Returns false only if the viewer could not start, so the caller falls
-    /// back to Edge. <paramref name="preferred"/> empty = no language filter.
+    /// window is closed — by the user, the language reconciler, or the 20-minute
+    /// limit. Returns null on success, or an error message if the viewer could
+    /// not start (the lifecycle then keeps the file; there is no Edge fallback).
+    /// <paramref name="preferred"/> empty = no language filter.
     /// </summary>
     public static string? ShowAndWait(
         string pdfPath, CancellationToken ct,
