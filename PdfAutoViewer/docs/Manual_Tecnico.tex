@@ -95,7 +95,7 @@ documentos PDF descargados (instrucciones de trabajo WI / MPI)}\\[3cm]
 \textbf{Plataforma} & Microsoft Windows 10 / 11 (x64) \\[5pt]
 \textbf{Tecnología} & .NET 8 --- Windows Forms (C\#) \\[5pt]
 \textbf{Motor de visualización} & Microsoft WebView2 (Chromium) \\[5pt]
-\textbf{Versión de la aplicación} & 2.1.0 \\[5pt]
+\textbf{Versión de la aplicación} & 2.2.0 \\[5pt]
 \textbf{Fecha} & Junio de 2026 \\
 \end{tabular}
 
@@ -138,6 +138,9 @@ No realiza ninguna otra acción sobre el equipo ni sobre los datos del usuario.
   \item Límite de visualización de 20 minutos, con un aviso previo a los 15.
   \item Reemplazo automático de un documento por su copia más reciente.
   \item Filtro de idioma configurable cuando se descargan ambas versiones.
+  \item Prioridad por tipo: el PDF derivado de un \texttt{.docx}
+        (\texttt{\_docx.pdf}) prevalece sobre el \texttt{.pdf} nativo del mismo
+        documento e idioma.
   \item Detección robusta de descargas mediante eventos del sistema de archivos
         y una reexploración periódica de respaldo.
   \item Identidad visual propia: icono azul con el texto «PDF» aplicado al
@@ -305,6 +308,44 @@ nombre base. Por ejemplo, \texttt{D000\_H\_SPA\_Reporte} y
 \texttt{D000\_H\_ENG Reporte} se emparejan correctamente.
 
 % ======================================================================
+\section{Prioridad por tipo de documento}
+% ======================================================================
+En producción, un mismo documento puede descargarse en dos formatos: el
+\texttt{.pdf} nativo y la versión convertida desde \texttt{.docx}, que el sistema
+de origen entrega como \texttt{\_docx.pdf} (la extensión \texttt{.docx} se
+convierte en un sufijo \texttt{\_docx}). Pueden llegar así hasta cuatro archivos:
+dos idiomas $\times$ dos tipos.
+
+El criterio de prioridad se aplica \textbf{después} del filtro de idioma: para el
+mismo documento e idioma, la copia derivada de \texttt{.docx} (\texttt{\_docx.pdf})
+prevalece sobre el \texttt{.pdf} nativo, que se cierra automáticamente. La regla es
+simétrica, por lo que funciona sin importar cuál de los dos tipos se descargue
+primero.
+
+\begin{xltabular}{\textwidth}{@{} L L @{}}
+\toprule
+\textbf{Situación} & \textbf{Comportamiento} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Situación} & \textbf{Comportamiento} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+Solo el \texttt{.pdf} nativo & Se abre el nativo. \\
+Solo el \texttt{\_docx.pdf} & Se abre el derivado de docx. \\
+Ambos tipos del mismo documento e idioma & Permanece el \texttt{\_docx.pdf}; el nativo se cierra. \\
+\bottomrule
+\end{xltabular}
+
+El sufijo de copia del navegador (\texttt{(1)}, \texttt{(2)}, \ldots) se ignora de
+forma uniforme en todas las claves de identidad del archivo. Así, una copia más
+reciente reemplaza correctamente a la abierta y el emparejamiento de idioma sigue
+funcionando aunque uno de los archivos sea una copia (por ejemplo
+\texttt{\_docx (1).pdf}).
+
+% ======================================================================
 \section{Reemplazo por copia más reciente}
 % ======================================================================
 Si un documento ya está abierto y el usuario descarga una copia más reciente del
@@ -443,6 +484,27 @@ dotnet publish PdfAutoViewer/PdfAutoViewer.csproj -c Release ^
 También puede abrirse la solución \texttt{PdfAutoViewer.sln} en Visual Studio
 2022 o JetBrains Rider.
 
+\subsection{Compilación ligera de un solo archivo}
+Para distribuir la aplicación como un único ejecutable de aproximadamente
+1,8~MB, se empaquetan la app y las DLL de WebView2 (incluido el cargador nativo
+\texttt{WebView2Loader.dll}) dentro del \texttt{.exe}, \textbf{sin} incluir .NET.
+El equipo destino sigue necesitando el \emph{.NET~8 Desktop Runtime} y el
+\emph{WebView2 Runtime}. El script \texttt{publish.bat} ejecuta este mismo
+comando.
+
+\begin{lstlisting}[caption={Compilación ligera (un solo archivo, sin .NET embebido).}]
+dotnet publish PdfAutoViewer/PdfAutoViewer.csproj -c Release -r win-x64 ^
+       --self-contained false ^
+       -p:PublishSingleFile=true ^
+       -p:IncludeNativeLibrariesForSelfExtract=true ^
+       -o publish-light
+\end{lstlisting}
+
+El ejecutable se genera en \ruta{publish-light\bs PdfAutoViewer.exe}; los archivos
+\texttt{.xml} y \texttt{.pdb} contiguos no se necesitan en ejecución. Para una
+compilación totalmente autónoma que \textbf{no} requiera .NET en el destino
+(empaqueta el runtime, $\sim$80~MB), use \texttt{-{}-self-contained true}.
+
 \subsection{Instalación del SDK sin privilegios de administrador}
 En equipos corporativos sin permisos de administrador, el SDK de .NET 8 puede
 instalarse por usuario, en \ruta{\%USERPROFILE\%\bs.dotnet}, y utilizarse con su
@@ -567,6 +629,7 @@ La aplicación está diseñada para degradar de forma controlada:
 \endhead
 \bottomrule
 \endfoot
+2.2.0 & Junio de 2026 & Prioridad por tipo: el PDF derivado de \texttt{.docx} (\texttt{\_docx.pdf}) prevalece sobre el \texttt{.pdf} nativo tras el filtro de idioma; manejo uniforme del sufijo de copia \texttt{(n)} en todas las claves de identidad; \texttt{publish.bat} genera la compilación ligera de un solo archivo. \\
 2.1.0 & Junio de 2026 & Identidad de marca «Philips Document Flow (PDF)»; icono azul con el texto «PDF» en el ejecutable, la ventana y la bandeja; interfaz totalmente en inglés; versión leída del ensamblado; manual técnico en español e inglés. \\
 2.0 & --- & Visor integrado único (WebView2); configuración mínima; límite de visualización de 20 minutos; robustez para operación continua. \\
 \bottomrule

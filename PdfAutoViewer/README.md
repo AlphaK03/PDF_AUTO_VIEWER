@@ -2,7 +2,7 @@
 
 > *Pop · Display · Flush* — the document appears, you read it, and it's gone.
 
-**Version 2.1.0** · For full architecture, deployment and maintenance details see
+**Version 2.2.0** · For full architecture, deployment and maintenance details see
 the technical manual (LaTeX): [English](docs/Technical_Manual.tex) ·
 [Español](docs/Manual_Tecnico.tex).
 
@@ -23,6 +23,8 @@ two languages, identified by a suffix in the file name (`_SPA`, `_ENG`).
 - When both languages are downloaded at once, the **preferred language** opens;
   if only one arrives, that one opens. The preferred language is the only
   configurable option and is selected from the main window.
+- When a document also arrives as a `.docx`-derived PDF (`_docx.pdf`), that copy
+  **takes priority** over the native `.pdf` of the same document and language.
 - If a **newer copy** of the open document is downloaded, it replaces the open
   version and the viewing-time limit restarts.
 
@@ -157,3 +159,9 @@ built-in viewer, auto-deletion, 20-minute limit) is fixed by design.
 |---|---|
 | .NET 8 / Windows Forms | Platform and interface |
 | `Microsoft.Web.WebView2` | Built-in viewer (Chromium PDF engine) |
+
+## .NET Version
+
+```bash
+& "$env:USERPROFILE\.dotnet\dotnet.exe" --version 
+```

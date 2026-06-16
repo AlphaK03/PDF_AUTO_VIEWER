@@ -95,7 +95,7 @@ PDF documents (work instructions WI / MPI)}\\[3cm]
 \textbf{Platform} & Microsoft Windows 10 / 11 (x64) \\[5pt]
 \textbf{Technology} & .NET 8 --- Windows Forms (C\#) \\[5pt]
 \textbf{Rendering engine} & Microsoft WebView2 (Chromium) \\[5pt]
-\textbf{Application version} & 2.1.0 \\[5pt]
+\textbf{Application version} & 2.2.0 \\[5pt]
 \textbf{Date} & June 2026 \\
 \end{tabular}
 
@@ -137,6 +137,8 @@ performs no other action on the machine or on the user's data.
   \item A 20-minute viewing limit, with a prior warning at 15 minutes.
   \item Automatic replacement of a document by its most recent copy.
   \item A configurable language filter when both versions are downloaded.
+  \item Type priority: the \texttt{.docx}-derived PDF (\texttt{\_docx.pdf}) takes
+        precedence over the native \texttt{.pdf} of the same document and language.
   \item Robust download detection via file-system events and a periodic
         backup rescan.
   \item Its own visual identity: a blue icon with the text ``PDF'' applied to the
@@ -300,6 +302,42 @@ base name. For example, \texttt{D000\_H\_SPA\_Report} and
 \texttt{D000\_H\_ENG Report} are paired correctly.
 
 % ======================================================================
+\section{Document type priority}
+% ======================================================================
+In production, the same document may be downloaded in two formats: the native
+\texttt{.pdf} and the version converted from \texttt{.docx}, which the source
+system delivers as \texttt{\_docx.pdf} (the \texttt{.docx} extension becomes a
+\texttt{\_docx} suffix). Up to four files may therefore arrive: two languages
+$\times$ two types.
+
+The priority rule is applied \textbf{after} the language filter: for the same
+document and language, the \texttt{.docx}-derived copy (\texttt{\_docx.pdf}) takes
+precedence over the native \texttt{.pdf}, which is closed automatically. The rule
+is symmetric, so it works regardless of which type is downloaded first.
+
+\begin{xltabular}{\textwidth}{@{} L L @{}}
+\toprule
+\textbf{Situation} & \textbf{Behavior} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Situation} & \textbf{Behavior} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+Only the native \texttt{.pdf} & The native one opens. \\
+Only the \texttt{\_docx.pdf} & The docx-derived one opens. \\
+Both types of the same document and language & The \texttt{\_docx.pdf} remains; the native one closes. \\
+\bottomrule
+\end{xltabular}
+
+The browser copy suffix (\texttt{(1)}, \texttt{(2)}, \ldots) is stripped uniformly
+across every file-identity key. As a result, a more recent copy correctly replaces
+the open one and language pairing keeps working even when one of the files is a
+copy (e.g. \texttt{\_docx (1).pdf}).
+
+% ======================================================================
 \section{Replacement by a more recent copy}
 % ======================================================================
 If a document is already open and the user downloads a more recent copy of the
@@ -437,6 +475,26 @@ dotnet publish PdfAutoViewer/PdfAutoViewer.csproj -c Release ^
 The \texttt{PdfAutoViewer.sln} solution can also be opened in Visual Studio 2022 or
 JetBrains Rider.
 
+\subsection{Lightweight single-file build}
+To distribute the application as a single executable of about 1.8~MB, the app and
+the WebView2 DLLs (including the native \texttt{WebView2Loader.dll}) are bundled
+inside the \texttt{.exe}, \textbf{without} embedding .NET. The target machine still
+needs the \emph{.NET~8 Desktop Runtime} and the \emph{WebView2 Runtime}. The
+\texttt{publish.bat} script runs this same command.
+
+\begin{lstlisting}[caption={Lightweight build (single file, no embedded .NET).}]
+dotnet publish PdfAutoViewer/PdfAutoViewer.csproj -c Release -r win-x64 ^
+       --self-contained false ^
+       -p:PublishSingleFile=true ^
+       -p:IncludeNativeLibrariesForSelfExtract=true ^
+       -o publish-light
+\end{lstlisting}
+
+The executable is produced at \ruta{publish-light\bs PdfAutoViewer.exe}; the
+adjacent \texttt{.xml} and \texttt{.pdb} files are not needed at runtime. For a
+fully standalone build that does \textbf{not} require .NET on the target (bundles
+the runtime, $\sim$80~MB), use \texttt{-{}-self-contained true}.
+
 \subsection{Installing the SDK without administrator privileges}
 On corporate machines without administrator rights, the .NET 8 SDK can be
 installed per-user, under \ruta{\%USERPROFILE\%\bs.dotnet}, and used by its full
@@ -562,6 +620,7 @@ The application is designed to degrade gracefully:
 \endhead
 \bottomrule
 \endfoot
+2.2.0 & June 2026 & Type priority: the \texttt{.docx}-derived PDF (\texttt{\_docx.pdf}) takes precedence over the native \texttt{.pdf} after the language filter; uniform handling of the \texttt{(n)} copy suffix across every file-identity key; \texttt{publish.bat} produces the lightweight single-file build. \\
 2.1.0 & June 2026 & ``Philips Document Flow (PDF)'' branding; blue ``PDF'' icon on the executable, the window and the tray; fully English UI; version read from the assembly; technical manual in Spanish and English. \\
 2.0 & --- & Single built-in viewer (WebView2); minimal configuration; 20-minute viewing limit; robustness for continuous operation. \\
 \bottomrule
