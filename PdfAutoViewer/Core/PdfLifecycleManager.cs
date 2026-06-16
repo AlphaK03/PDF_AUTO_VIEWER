@@ -323,8 +323,10 @@ public sealed class PdfLifecycleManager : IDisposable
 
     // True when the PDF was produced from a .docx source. Those files download as
     // "<name>_docx.pdf" (the ".docx" extension becomes a trailing "_docx" token).
+    // The "(n)" duplicate suffix is stripped first, so a re-downloaded copy
+    // ("<name>_docx (1).pdf") is still recognized as the docx-derived type.
     internal static bool IsDocxType(string pdfPath) =>
-        Regex.IsMatch(Path.GetFileNameWithoutExtension(pdfPath),
+        Regex.IsMatch(StripNumericSuffix(Path.GetFileNameWithoutExtension(pdfPath)),
                       @"[_\s]docx$", RegexOptions.IgnoreCase);
 
     // Type-group key: identifies the same document AND language regardless of its
