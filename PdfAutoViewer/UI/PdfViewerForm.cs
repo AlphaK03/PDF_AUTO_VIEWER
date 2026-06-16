@@ -41,6 +41,11 @@ public sealed class PdfViewerForm : Form
     private readonly string _language;    // "SPA" / "ENG" / ""
     private readonly string _preferred;   // "SPA" / "ENG" / "" (empty = no preference)
 
+    // Type coordination data: a ".docx"-derived PDF ("_docx.pdf") takes priority
+    // over the native ".pdf" of the same document and language.
+    private readonly string _typeGroupKey; // same document + language, any type
+    private readonly bool   _isDocx;       // true if this is the "_docx.pdf" variant
+
     // Raises the single user-facing notification (the 15-minute warning).
     private readonly Action<string, string>? _notify;
 
@@ -150,6 +155,10 @@ public sealed class PdfViewerForm : Form
     //      • If THIS is the preferred language → close the non-preferred sibling.
     //      • If THIS is non-preferred and a preferred sibling is open → close myself.
     //    Symmetric, so it works regardless of which language downloads first.
+    //
+    // 3. Type rule (ALWAYS, after the language filter): for the same document and
+    //    language, the ".docx"-derived "_docx.pdf" takes priority over the native
+    //    ".pdf". Symmetric, like the language rule.
     private void RegisterAndReconcile()
     {
         var toClose = new List<PdfViewerForm>();
@@ -185,6 +194,24 @@ public sealed class PdfViewerForm : Form
                     toClose.Add(this);
                 }
             }
+
+            // 3. Type filtering between the "_docx.pdf" and native ".pdf" copies
+            //    of the same document and language. The docx-derived copy wins.
+            if (_isDocx)
+            {
+                foreach (var other in OpenViewers)
+                    if (!ReferenceEquals(other, this)
+                        && other._typeGroupKey == _typeGroupKey
+                        && !other._isDocx)
+                        toClose.Add(other);
+            }
+            else if (OpenViewers.Any(o =>
+                         !ReferenceEquals(o, this)
+                         && o._typeGroupKey == _typeGroupKey
+                         && o._isDocx))
+            {
+                toClose.Add(this);
+            }
         }
 
         foreach (var f in toClose.Distinct())
@@ -202,14 +229,17 @@ public sealed class PdfViewerForm : Form
     // ── Viewer window ──────────────────────────────────────────────────────
 
     private PdfViewerForm(string pdfPath, string pairingKey, string documentKey,
-                          string language, string preferred, Action<string, string>? notify)
+                          string language, string preferred,
+                          string typeGroupKey, bool isDocx, Action<string, string>? notify)
     {
-        _pdfPath     = pdfPath;
-        _pairingKey  = pairingKey;
-        _documentKey = documentKey;
-        _language    = language;
-        _preferred   = preferred;
-        _notify      = notify;
+        _pdfPath      = pdfPath;
+        _pairingKey   = pairingKey;
+        _documentKey  = documentKey;
+        _language     = language;
+        _preferred    = preferred;
+        _typeGroupKey = typeGroupKey;
+        _isDocx       = isDocx;
+        _notify       = notify;
 
         Text          = Path.GetFileName(pdfPath);
         ClientSize    = new Size(1100, 800);
@@ -300,7 +330,7 @@ public sealed class PdfViewerForm : Form
     public static string? ShowAndWait(
         string pdfPath, CancellationToken ct,
         string pairingKey, string documentKey, string language, string preferred,
-        Action<string, string>? notify = null)
+        string typeGroupKey, bool isDocx, Action<string, string>? notify = null)
     {
         string? error = null;
 
@@ -308,7 +338,7 @@ public sealed class PdfViewerForm : Form
         {
             try
             {
-                using var form = new PdfViewerForm(pdfPath, pairingKey, documentKey, language, preferred, notify);
+                using var form = new PdfViewerForm(pdfPath, pairingKey, documentKey, language, preferred, typeGroupKey, isDocx, notify);
                 using var reg  = ct.Register(() =>
                 {
                     try { form.BeginInvoke(new Action(form.Close)); } catch { }

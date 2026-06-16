@@ -165,7 +165,8 @@ public sealed class PdfLifecycleManager : IDisposable
             ? "" : _settings.PreferredLanguage.ToString();
 
         string? viewerError = UI.PdfViewerForm.ShowAndWait(
-            pdfPath, ct, GetPairingKey(pdfPath), GetDocumentKey(pdfPath), lang, preferred, Notify);
+            pdfPath, ct, GetPairingKey(pdfPath), GetDocumentKey(pdfPath), lang, preferred,
+            GetTypeGroupKey(pdfPath), IsDocxType(pdfPath), Notify);
 
         if (viewerError != null)
         {
@@ -298,12 +299,14 @@ public sealed class PdfLifecycleManager : IDisposable
         return "";
     }
 
-    // Pairing key: removes the _SPA/_ENG token, normalizes separators, uppercases.
-    // e.g. "D123_H_SPA_Report" and "D123_H_ENG Report" both yield "D123 H REPORT".
+    // Pairing key: drops the "(n)" duplicate suffix and the _SPA/_ENG token,
+    // normalizes separators, uppercases. Stripping "(n)" lets a re-downloaded
+    // copy in one language still pair with the other language.
+    // e.g. "D123_H_SPA_Report (1)" and "D123_H_ENG Report" both yield "D123 H REPORT".
     internal static string GetPairingKey(string pdfPath)
     {
         string dir      = Path.GetDirectoryName(pdfPath) ?? "";
-        string stem     = Path.GetFileNameWithoutExtension(pdfPath);
+        string stem     = StripNumericSuffix(Path.GetFileNameWithoutExtension(pdfPath));
         string clean    = Regex.Replace(stem, @"_(SPA|ENG)(?=[_\s]|$)", "", RegexOptions.IgnoreCase);
         clean = Regex.Replace(clean, @"[_\s]+", " ").Trim().ToUpperInvariant();
         return Path.Combine(dir.ToUpperInvariant(), clean);
@@ -318,6 +321,28 @@ public sealed class PdfLifecycleManager : IDisposable
         string dir  = Path.GetDirectoryName(pdfPath) ?? "";
         string stem = StripNumericSuffix(Path.GetFileNameWithoutExtension(pdfPath));
         return Path.Combine(dir.ToUpperInvariant(), stem.ToUpperInvariant());
+    }
+
+    // True when the PDF was produced from a .docx source. Those files download as
+    // "<name>_docx.pdf" (the ".docx" extension becomes a trailing "_docx" token).
+    // The "(n)" duplicate suffix is stripped first, so a re-downloaded copy
+    // ("<name>_docx (1).pdf") is still recognized as the docx-derived type.
+    internal static bool IsDocxType(string pdfPath) =>
+        Regex.IsMatch(StripNumericSuffix(Path.GetFileNameWithoutExtension(pdfPath)),
+                      @"[_\s]docx$", RegexOptions.IgnoreCase);
+
+    // Type-group key: identifies the same document AND language regardless of its
+    // type (native ".pdf" vs the ".docx"-derived "_docx.pdf"). Keeps the language,
+    // drops the "_docx" token and the "(n)" duplicate suffix, and normalizes
+    // separators — so "D123_H_SPA_Report.pdf" and "D123_H_SPA_Report_docx.pdf"
+    // share the same key. Used to give the docx-derived copy priority.
+    internal static string GetTypeGroupKey(string pdfPath)
+    {
+        string dir  = Path.GetDirectoryName(pdfPath) ?? "";
+        string stem = StripNumericSuffix(Path.GetFileNameWithoutExtension(pdfPath));
+        stem = Regex.Replace(stem, @"[_\s]docx$", "", RegexOptions.IgnoreCase);
+        stem = Regex.Replace(stem, @"[_\s]+", " ").Trim().ToUpperInvariant();
+        return Path.Combine(dir.ToUpperInvariant(), stem);
     }
 
     // Deletes with growing retries (~9s total). Right after a download the

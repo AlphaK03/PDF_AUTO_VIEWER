@@ -47,6 +47,18 @@ public class FileNamingTests
                         PdfLifecycleManager.GetPairingKey(b));
     }
 
+    [Fact]
+    public void GetPairingKey_LanguageCopyAndOtherLanguage_ShareKey()
+    {
+        // A re-downloaded copy in one language must still pair with the other
+        // language, so the language filter applies (e.g. SPA "(1)" vs ENG).
+        const string spaCopy = @"C:\Downloads\D000227828_H_SPA_MPI_Masking_Omniwire_docx (1).pdf";
+        const string eng     = @"C:\Downloads\D000227828_H_ENG_MPI_Masking_Omniwire_docx.pdf";
+
+        Assert.Equal(PdfLifecycleManager.GetPairingKey(spaCopy),
+                     PdfLifecycleManager.GetPairingKey(eng));
+    }
+
     // ── Copy identity (replacement by a more recent copy) ────────────────
 
     [Theory]
@@ -75,4 +87,51 @@ public class FileNamingTests
     [InlineData("v (2) final", "v (2) final")]      // only stripped at the end of the name
     public void StripNumericSuffix_RemovesCopySuffix(string stem, string expected)
         => Assert.Equal(expected, PdfLifecycleManager.StripNumericSuffix(stem));
+
+    // ── Document type (.docx-derived "_docx.pdf" vs native ".pdf") ───────
+
+    [Theory]
+    [InlineData("D000227828_H_SPA_MPI_Masking_Omniwire_docx.pdf", true)]
+    [InlineData("D000227828_H_SPA_MPI Masking Omniwire.pdf", false)]
+    [InlineData("report_DOCX.pdf", true)]           // case-insensitive
+    [InlineData("report docx.pdf", true)]           // space separator
+    [InlineData("reportdocx.pdf", false)]           // needs a separator before "docx"
+    [InlineData("report_docx (1).pdf", true)]       // browser duplicate copy
+    [InlineData("report_docx (2).pdf", true)]       // browser duplicate copy
+    public void IsDocxType_DetectsDocxDerivedPdf(string file, bool expected)
+        => Assert.Equal(expected, PdfLifecycleManager.IsDocxType(file));
+
+    [Fact]
+    public void GetDocumentKey_DocxCopy_SharesKeyWithOriginal()
+    {
+        // A re-downloaded docx-derived copy must map to the same document key as
+        // the open one, so the newer copy replaces it (newest version wins).
+        const string original = @"C:\Downloads\D000227828_H_SPA_MPI_Masking_Omniwire_docx.pdf";
+        const string copy     = @"C:\Downloads\D000227828_H_SPA_MPI_Masking_Omniwire_docx (1).pdf";
+
+        Assert.Equal(PdfLifecycleManager.GetDocumentKey(original),
+                     PdfLifecycleManager.GetDocumentKey(copy));
+    }
+
+    [Fact]
+    public void GetTypeGroupKey_NativeAndDocxOfSameDocAndLanguage_ShareKey()
+    {
+        // Real-world casing: the native uses spaces, the docx-derived one
+        // uses underscores and a trailing "_docx".
+        const string native = @"C:\Downloads\D000227828_H_SPA_MPI Masking Omniwire.pdf";
+        const string docx   = @"C:\Downloads\D000227828_H_SPA_MPI_Masking_Omniwire_docx.pdf";
+
+        Assert.Equal(PdfLifecycleManager.GetTypeGroupKey(native),
+                     PdfLifecycleManager.GetTypeGroupKey(docx));
+    }
+
+    [Fact]
+    public void GetTypeGroupKey_DifferentLanguage_DoesNotShareKey()
+    {
+        const string spa = @"C:\Downloads\D000227828_H_SPA_MPI_Masking_Omniwire_docx.pdf";
+        const string eng = @"C:\Downloads\D000227828_H_ENG_MPI_Masking_Omniwire_docx.pdf";
+
+        Assert.NotEqual(PdfLifecycleManager.GetTypeGroupKey(spa),
+                        PdfLifecycleManager.GetTypeGroupKey(eng));
+    }
 }
