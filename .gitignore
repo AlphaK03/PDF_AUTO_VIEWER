@@ -4,6 +4,7 @@
 [Dd]ebug/
 [Rr]elease/
 publish/
+publish-light/
 artifacts/
 
 # ---- Archivos de usuario / IDE ----

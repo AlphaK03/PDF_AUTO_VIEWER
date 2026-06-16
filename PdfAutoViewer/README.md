@@ -87,6 +87,23 @@ dotnet publish PdfAutoViewer/PdfAutoViewer.csproj -c Release -r win-x64 --self-c
 The executable is produced at `publish\PdfAutoViewer.exe` (requires the .NET 8
 runtime on the target machine). The `publish.bat` script runs this same command.
 
+### Lightweight single-file build
+
+Bundles the app and the WebView2 DLLs (including the native `WebView2Loader.dll`)
+into a single `~1.8 MB` `.exe`, **without** embedding .NET — so it stays small but
+still requires the .NET 8 Desktop Runtime on the target machine.
+
+```bash
+dotnet publish PdfAutoViewer/PdfAutoViewer.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish-light
+```
+
+The single executable is produced at `publish-light\PdfAutoViewer.exe`; the
+accompanying `.xml` / `.pdb` files are not needed at runtime and can be deleted.
+
+> For a fully standalone build that does **not** require .NET on the target (bundles
+> the runtime, `~80 MB`), add `--self-contained true`. In every case the WebView2
+> Runtime must be present on the machine (preinstalled on Windows 11).
+
 The solution `PdfAutoViewer.sln` can also be opened directly in Visual Studio
 2022 or JetBrains Rider.
 
