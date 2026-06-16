@@ -299,12 +299,14 @@ public sealed class PdfLifecycleManager : IDisposable
         return "";
     }
 
-    // Pairing key: removes the _SPA/_ENG token, normalizes separators, uppercases.
-    // e.g. "D123_H_SPA_Report" and "D123_H_ENG Report" both yield "D123 H REPORT".
+    // Pairing key: drops the "(n)" duplicate suffix and the _SPA/_ENG token,
+    // normalizes separators, uppercases. Stripping "(n)" lets a re-downloaded
+    // copy in one language still pair with the other language.
+    // e.g. "D123_H_SPA_Report (1)" and "D123_H_ENG Report" both yield "D123 H REPORT".
     internal static string GetPairingKey(string pdfPath)
     {
         string dir      = Path.GetDirectoryName(pdfPath) ?? "";
-        string stem     = Path.GetFileNameWithoutExtension(pdfPath);
+        string stem     = StripNumericSuffix(Path.GetFileNameWithoutExtension(pdfPath));
         string clean    = Regex.Replace(stem, @"_(SPA|ENG)(?=[_\s]|$)", "", RegexOptions.IgnoreCase);
         clean = Regex.Replace(clean, @"[_\s]+", " ").Trim().ToUpperInvariant();
         return Path.Combine(dir.ToUpperInvariant(), clean);

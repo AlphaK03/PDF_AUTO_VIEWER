@@ -47,6 +47,18 @@ public class FileNamingTests
                         PdfLifecycleManager.GetPairingKey(b));
     }
 
+    [Fact]
+    public void GetPairingKey_LanguageCopyAndOtherLanguage_ShareKey()
+    {
+        // A re-downloaded copy in one language must still pair with the other
+        // language, so the language filter applies (e.g. SPA "(1)" vs ENG).
+        const string spaCopy = @"C:\Downloads\D000227828_H_SPA_MPI_Masking_Omniwire_docx (1).pdf";
+        const string eng     = @"C:\Downloads\D000227828_H_ENG_MPI_Masking_Omniwire_docx.pdf";
+
+        Assert.Equal(PdfLifecycleManager.GetPairingKey(spaCopy),
+                     PdfLifecycleManager.GetPairingKey(eng));
+    }
+
     // ── Copy identity (replacement by a more recent copy) ────────────────
 
     [Theory]
