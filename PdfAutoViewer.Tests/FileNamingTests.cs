@@ -75,4 +75,37 @@ public class FileNamingTests
     [InlineData("v (2) final", "v (2) final")]      // only stripped at the end of the name
     public void StripNumericSuffix_RemovesCopySuffix(string stem, string expected)
         => Assert.Equal(expected, PdfLifecycleManager.StripNumericSuffix(stem));
+
+    // ── Document type (.docx-derived "_docx.pdf" vs native ".pdf") ───────
+
+    [Theory]
+    [InlineData("D000227828_H_SPA_MPI_Masking_Omniwire_docx.pdf", true)]
+    [InlineData("D000227828_H_SPA_MPI Masking Omniwire.pdf", false)]
+    [InlineData("report_DOCX.pdf", true)]           // case-insensitive
+    [InlineData("report docx.pdf", true)]           // space separator
+    [InlineData("reportdocx.pdf", false)]           // needs a separator before "docx"
+    public void IsDocxType_DetectsDocxDerivedPdf(string file, bool expected)
+        => Assert.Equal(expected, PdfLifecycleManager.IsDocxType(file));
+
+    [Fact]
+    public void GetTypeGroupKey_NativeAndDocxOfSameDocAndLanguage_ShareKey()
+    {
+        // Real-world casing: the native uses spaces, the docx-derived one
+        // uses underscores and a trailing "_docx".
+        const string native = @"C:\Downloads\D000227828_H_SPA_MPI Masking Omniwire.pdf";
+        const string docx   = @"C:\Downloads\D000227828_H_SPA_MPI_Masking_Omniwire_docx.pdf";
+
+        Assert.Equal(PdfLifecycleManager.GetTypeGroupKey(native),
+                     PdfLifecycleManager.GetTypeGroupKey(docx));
+    }
+
+    [Fact]
+    public void GetTypeGroupKey_DifferentLanguage_DoesNotShareKey()
+    {
+        const string spa = @"C:\Downloads\D000227828_H_SPA_MPI_Masking_Omniwire_docx.pdf";
+        const string eng = @"C:\Downloads\D000227828_H_ENG_MPI_Masking_Omniwire_docx.pdf";
+
+        Assert.NotEqual(PdfLifecycleManager.GetTypeGroupKey(spa),
+                        PdfLifecycleManager.GetTypeGroupKey(eng));
+    }
 }
