@@ -20,6 +20,10 @@
     <ApplicationIcon>app.ico</ApplicationIcon>
     <!-- PerMonitorV2 makes the window sharp on high-DPI screens -->
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <!-- Demote the harmless WindowsBase version conflict (MSB3277) to a message.
+         It comes from the unused WPF wrapper in the WebView2 package; this app
+         is WinForms and never loads it. -->
+    <MSBuildWarningsAsMessages>MSB3277</MSBuildWarningsAsMessages>
   </PropertyGroup>
 
   <ItemGroup>
