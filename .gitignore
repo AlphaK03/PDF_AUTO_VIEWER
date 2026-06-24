@@ -5,6 +5,7 @@
 [Rr]elease/
 publish/
 publish-light/
+publish-fixed/
 artifacts/
 
 # ---- Archivos de usuario / IDE ----
