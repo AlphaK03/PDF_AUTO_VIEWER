@@ -103,10 +103,12 @@ requires the .NET 8 Desktop Runtime on the target.
 ```
 
 **3. Fixed version (standalone)** — all of the above plus the .NET runtime bundled
-in, so the target needs **no .NET installed** (single file, `~80 MB`).
+in, so the target needs **no .NET installed** (single file, `~69 MB` compressed).
+`EnableCompressionInSingleFile` roughly halves the size (~156 MB → ~69 MB) at the
+cost of a slightly slower first launch.
 
 ```powershell
-& "$env:USERPROFILE\.dotnet\dotnet.exe" publish PdfAutoViewer/PdfAutoViewer.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish-fixed
+& "$env:USERPROFILE\.dotnet\dotnet.exe" publish PdfAutoViewer/PdfAutoViewer.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=none -o publish-fixed
 ```
 
 The `publish.bat` script runs option 2 (the light version). For options 2 and 3 the
