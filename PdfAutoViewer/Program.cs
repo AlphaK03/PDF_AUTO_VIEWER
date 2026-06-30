@@ -1,3 +1,4 @@
+using PdfAutoViewer.Core;
 using PdfAutoViewer.UI;
 
 namespace PdfAutoViewer;
@@ -33,6 +34,9 @@ static class Program
 
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
+
+        var startupManager = new StartupManager((kind, ex) => Log(kind, ex));
+        startupManager.EnableStartup();
 
         // ApplicationContext keeps the app alive through the tray icon
         // without requiring a main window to stay open.
