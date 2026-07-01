@@ -22,21 +22,26 @@ two languages, identified by a suffix in the file name (`_SPA`, `_ENG`).
   closes by itself at 20.
 - When both languages are downloaded at once, the **preferred language** opens;
   if only one arrives, that one opens. The preferred language is the only
-  configurable option and is selected from the main window.
+  user-configurable option and is selected from the main window.
 - When a document also arrives as a `.docx`-derived PDF (`_docx.pdf`), that copy
   **takes priority** over the native `.pdf` of the same document and language.
 - If a **newer copy** of the open document is downloaded, it replaces the open
   version and the viewing-time limit restarts.
+- The application **automatically registers for Windows startup** at the user level
+  (`HKEY_CURRENT_USER`), so it launches silently when the user logs in.
 
 ## Continuous operation
 
 Designed to run unattended (24/7):
 
+- **Automatic startup**: the application registers itself for Windows startup at
+  the user level (no administrator rights required), so it launches automatically
+  when the user logs in.
 - **Single instance per Windows session**: prevents duplicate copies within the
   same session without blocking other sessions (VDI / multi-session hosts).
 - **Error logging**: unhandled exceptions are written to
   `%LOCALAPPDATA%\PdfAutoViewer\app-error.log`; a transient error does not stop
-  the application.
+  the application. Startup registration errors are also logged silently.
 - Bounded memory use during long-running operation.
 
 ## Requirements
@@ -82,49 +87,83 @@ dotnet test PdfAutoViewer.Tests
 
 ## Build the executable (.exe)
 
-Three publish options, from smallest/most dependencies to largest/fully
-self-sufficient. Commands use the per-user local SDK (no admin); run them from the
-solution root. In every case the **WebView2 Runtime** must be present on the target
-(preinstalled on Windows 11).
+Three publish options are available, from the smallest (requires .NET) to the
+largest (fully self-contained). All commands use the per-user local SDK (no
+administrator privileges required) and must be executed from the solution root.
 
-**1. Simple `.exe`** — the executable plus its companion DLLs in a folder.
-Requires the .NET 8 Desktop Runtime on the target.
+> **Note**
+>
+> - **x64**: For 64-bit Windows.
+> - **x86**: For 32-bit Windows (for example, Wyse terminals running Windows 10 x86).
+> - The **WebView2 Runtime** must be installed on the target machine in all cases.
 
-```powershell
-& "$env:USERPROFILE\.dotnet\dotnet.exe" publish PdfAutoViewer/PdfAutoViewer.csproj -c Release -r win-x64 --self-contained false -o publish
-```
+### 1. Simple `.exe`
 
-**2. Light version (single file)** — the `.exe` with the WebView2 DLLs (including
-the native `WebView2Loader.dll`) embedded into a single `~1.8 MB` file. Still
-requires the .NET 8 Desktop Runtime on the target.
+Produces the executable plus its companion DLLs. Requires the .NET 8 Desktop
+Runtime on the target machine.
 
-```powershell
-& "$env:USERPROFILE\.dotnet\dotnet.exe" publish PdfAutoViewer/PdfAutoViewer.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish-light
-```
-
-**3. Fixed version (standalone)** — all of the above plus the .NET runtime bundled
-in, so the target needs **no .NET installed** (single file, `~69 MB` compressed).
-`EnableCompressionInSingleFile` roughly halves the size (~156 MB → ~69 MB) at the
-cost of a slightly slower first launch.
+#### x64
 
 ```powershell
-& "$env:USERPROFILE\.dotnet\dotnet.exe" publish PdfAutoViewer/PdfAutoViewer.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=none -o publish-fixed
+& "$env:USERPROFILE\.dotnet\dotnet.exe" publish PdfAutoViewer/PdfAutoViewer.csproj -c Release -r win-x64 --self-contained false -o publish-x64
 ```
 
-The `publish.bat` script runs option 2 (the light version). For options 2 and 3 the
-accompanying `.xml` / `.pdb` files are not needed at runtime and can be deleted.
+#### x86
+
+```powershell
+& "$env:USERPROFILE\.dotnet\dotnet.exe" publish PdfAutoViewer/PdfAutoViewer.csproj -c Release -r win-x86 --self-contained false -o publish-x86
+```
+
+---
+
+### 2. Light version (single file)
+
+Produces a single executable (~1.8 MB) with the WebView2 native libraries
+embedded. Requires the .NET 8 Desktop Runtime on the target machine.
+
+#### x64
+
+```powershell
+& "$env:USERPROFILE\.dotnet\dotnet.exe" publish PdfAutoViewer/PdfAutoViewer.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish-light-x64
+```
+
+#### x86
+
+```powershell
+& "$env:USERPROFILE\.dotnet\dotnet.exe" publish PdfAutoViewer/PdfAutoViewer.csproj -c Release -r win-x86 --self-contained false -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish-light-x86
+```
+
+---
+
+### 3. Fixed version (standalone)
+
+Bundles the .NET runtime into the executable, so no .NET installation is
+required on the target machine.
+
+`EnableCompressionInSingleFile` significantly reduces the final size while
+slightly increasing the first startup time.
+
+#### x64
+
+```powershell
+& "$env:USERPROFILE\.dotnet\dotnet.exe" publish PdfAutoViewer/PdfAutoViewer.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=none -o publish-fixed-x64
+```
+
+#### x86
+
+```powershell
+& "$env:USERPROFILE\.dotnet\dotnet.exe" publish PdfAutoViewer/PdfAutoViewer.csproj -c Release -r win-x86 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=none -o publish-fixed-x86
+```
+
+---
+
+The `publish.bat` script generates the **Light x64** version by default.
+
+For both **Light** and **Fixed** versions, the generated `.xml` and `.pdb` files
+are optional and can be removed before deployment.
 
 The solution `PdfAutoViewer.sln` can also be opened directly in Visual Studio
 2022 or JetBrains Rider.
-
-## Tests
-
-Unit tests (xUnit) cover the deterministic business logic: language detection,
-document pairing, copy identity and configuration defaults.
-
-```bash
-dotnet test
-```
 
 ## Deployment notes (Windows 10)
 
@@ -149,17 +188,24 @@ PdfAutoViewer.sln              Visual Studio solution
 PdfAutoViewer/
   Program.cs                   Entry point
   PdfAutoViewer.csproj         Project (.NET 8, Windows Forms)
-  Core/                        Logic: settings, monitoring, lifecycle
+  Core/                        Logic: settings, monitoring, lifecycle, startup
   UI/                          Interface: tray, status window, viewer
 PdfAutoViewer.Tests/           Unit tests (xUnit)
 ```
 
 ## Configuration
 
-The only configurable option is the **preferred language**, selected from the
-application's main window and saved to
+The only user-configurable option is the **preferred language**, selected from
+the application's main window and saved to
 `%LOCALAPPDATA%\PdfAutoViewer\settings.json`. Everything else (watched folder,
-built-in viewer, auto-deletion, 20-minute limit) is fixed by design.
+built-in viewer, auto-deletion, 20-minute limit, startup registration) is fixed
+by design.
+
+Automatic startup is registered in the Windows Registry at:
+`HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run`
+
+To disable it, remove the `PdfAutoViewer` entry from that registry location, or
+use the Windows System Settings (Settings → Apps → Startup).
 
 ## Dependencies
 
