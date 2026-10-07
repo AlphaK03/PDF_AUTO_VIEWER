@@ -9,8 +9,8 @@ namespace PdfAutoViewer.UI;
 ///   • Opens instantly — no browser startup, no tab juggling.
 ///   • Close detection is EXACT (the form's own close event), replacing the
 ///     window-title polling heuristic used for Edge tabs.
-///   • Windows CAN be closed programmatically, so the language filter is done
-///     by opening every PDF and then closing the non-matching sibling.
+///   • Windows CAN be closed programmatically: when a better version of the
+///     document arrives (see Core.DocumentCoordinator) this one is closed.
 ///
 /// Reliability rules (a PDF must ALWAYS open):
 ///   • LoadFailed is set ONLY when WebView2 cannot initialize at all (runtime
@@ -35,19 +35,11 @@ public sealed class PdfViewerForm : Form
     private readonly string _pdfPath;
     private readonly WebView2 _webView = new() { Dock = DockStyle.Fill };
 
-    // Language coordination data (empty when no filtering applies)
-    private readonly string _pairingKey;
-    private readonly string _documentKey; // same doc + same language, ignores "(n)" copies
-    private readonly string _language;    // "SPA" / "ENG" / ""
-    private readonly string _preferred;   // "SPA" / "ENG" / "" (empty = no preference)
+    // Pop-ups in Spanish when SPA is the preferred language; English otherwise.
+    private readonly bool _spanish;
 
-    // Type coordination data: a ".docx"-derived PDF ("_docx.pdf") takes priority
-    // over the native ".pdf" of the same document and language.
-    private readonly string _typeGroupKey; // same document + language, any type
-    private readonly bool   _isDocx;       // true if this is the "_docx.pdf" variant
-
-    // Raises the single user-facing notification (the 15-minute warning).
-    private readonly Action<string, string>? _notify;
+    // Cancelled to close the window (better version arrived, or app exit).
+    private readonly CancellationToken _closeToken;
 
     private System.Windows.Forms.Timer? _warnTimer;
     private System.Windows.Forms.Timer? _closeTimer;
@@ -55,6 +47,9 @@ public sealed class PdfViewerForm : Form
     /// True if WebView2 failed to initialize; the lifecycle then keeps the file
     /// and reports the error (no Edge fallback by design).
     public bool LoadFailed { get; private set; }
+
+    /// True if the window was closed by the 20-minute viewing limit.
+    public bool ClosedByTimeLimit { get; private set; }
 
     /// Human-readable reason for a failed init (null when it worked).
     public string? InitError { get; private set; }
@@ -139,88 +134,8 @@ public sealed class PdfViewerForm : Form
         thread.Start();
     }
 
-    // ── Language reconciliation across viewer windows ─────────────────────
-
-    private static readonly object CoordLock = new();
-    private static readonly List<PdfViewerForm> OpenViewers = new();
-
-    // Once a window is ready, register it and decide which windows to close:
-    //
-    // 1. Newer-copy rule (ALWAYS): a freshly downloaded copy of the SAME
-    //    document and language (e.g. "doc (1).pdf" while "doc.pdf" is open)
-    //    replaces the open one, so the operator always sees the most recent
-    //    version. Being a brand-new window, its 20-minute timer starts fresh.
-    //
-    // 2. Language rule (only when a preference applies to a tagged document):
-    //      • If THIS is the preferred language → close the non-preferred sibling.
-    //      • If THIS is non-preferred and a preferred sibling is open → close myself.
-    //    Symmetric, so it works regardless of which language downloads first.
-    //
-    // 3. Type rule (ALWAYS, after the language filter): for the same document and
-    //    language, the ".docx"-derived "_docx.pdf" takes priority over the native
-    //    ".pdf". Symmetric, like the language rule.
-    private void RegisterAndReconcile()
-    {
-        var toClose = new List<PdfViewerForm>();
-
-        lock (CoordLock)
-        {
-            // 1. Newer copy of the same document supersedes the open one(s).
-            foreach (var other in OpenViewers)
-                if (other._documentKey == _documentKey)
-                    toClose.Add(other);
-
-            OpenViewers.Add(this);
-
-            // 2. Language filtering between _SPA and _ENG of the same document.
-            if (_preferred.Length > 0 && _language.Length > 0)
-            {
-                bool iAmPreferred =
-                    _language.Equals(_preferred, StringComparison.OrdinalIgnoreCase);
-
-                if (iAmPreferred)
-                {
-                    foreach (var other in OpenViewers)
-                        if (!ReferenceEquals(other, this)
-                            && other._pairingKey == _pairingKey
-                            && !other._language.Equals(_preferred, StringComparison.OrdinalIgnoreCase))
-                            toClose.Add(other);
-                }
-                else if (OpenViewers.Any(o =>
-                             !ReferenceEquals(o, this)
-                             && o._pairingKey == _pairingKey
-                             && o._language.Equals(_preferred, StringComparison.OrdinalIgnoreCase)))
-                {
-                    toClose.Add(this);
-                }
-            }
-
-            // 3. Type filtering between the "_docx.pdf" and native ".pdf" copies
-            //    of the same document and language. The docx-derived copy wins.
-            if (_isDocx)
-            {
-                foreach (var other in OpenViewers)
-                    if (!ReferenceEquals(other, this)
-                        && other._typeGroupKey == _typeGroupKey
-                        && !other._isDocx)
-                        toClose.Add(other);
-            }
-            else if (OpenViewers.Any(o =>
-                         !ReferenceEquals(o, this)
-                         && o._typeGroupKey == _typeGroupKey
-                         && o._isDocx))
-            {
-                toClose.Add(this);
-            }
-        }
-
-        foreach (var f in toClose.Distinct())
-            try { f.BeginInvoke(new Action(f.Close)); } catch { }
-    }
-
     protected override void OnFormClosed(FormClosedEventArgs e)
     {
-        lock (CoordLock) OpenViewers.Remove(this);
         _warnTimer?.Dispose();
         _closeTimer?.Dispose();
         base.OnFormClosed(e);
@@ -228,18 +143,11 @@ public sealed class PdfViewerForm : Form
 
     // ── Viewer window ──────────────────────────────────────────────────────
 
-    private PdfViewerForm(string pdfPath, string pairingKey, string documentKey,
-                          string language, string preferred,
-                          string typeGroupKey, bool isDocx, Action<string, string>? notify)
+    private PdfViewerForm(string pdfPath, bool spanish, CancellationToken closeToken)
     {
-        _pdfPath      = pdfPath;
-        _pairingKey   = pairingKey;
-        _documentKey  = documentKey;
-        _language     = language;
-        _preferred    = preferred;
-        _typeGroupKey = typeGroupKey;
-        _isDocx       = isDocx;
-        _notify       = notify;
+        _pdfPath    = pdfPath;
+        _spanish    = spanish;
+        _closeToken = closeToken;
 
         Text          = Path.GetFileName(pdfPath);
         ClientSize    = new Size(1100, 800);
@@ -270,14 +178,23 @@ public sealed class PdfViewerForm : Form
 
             await init; // propagate any initialization failure
 
-            // Window is functional — apply the language filter now.
-            RegisterAndReconcile();
+            // Told to close while starting up (a better version arrived, or the
+            // close request came before the window had a handle to receive it).
+            if (_closeToken.IsCancellationRequested)
+            {
+                if (!IsDisposed) Close();
+                return;
+            }
 
             // Start the 20-minute viewing limit (with a warning at 15 minutes).
             StartViewingLimit();
         }
         catch (Exception ex)
         {
+            // Closed on purpose mid-start: not a viewer failure, report nothing.
+            if (_closeToken.IsCancellationRequested || IsDisposed)
+                return;
+
             InitError  = $"{ex.GetType().Name}: {ex.Message}";
             LoadFailed = true;
             Log($"InitAsync failed for '{Path.GetFileName(_pdfPath)}' → {InitError}");
@@ -285,18 +202,23 @@ public sealed class PdfViewerForm : Form
         }
     }
 
-    // Enforces the maximum viewing time. At 15 minutes the user is warned
-    // (the only notification the app raises); at 20 minutes the window closes
-    // by itself, after which the lifecycle deletes the document as usual.
+    // Enforces the maximum viewing time. At 15 minutes the user is warned with
+    // a pop-up window (not a tray balloon: notifications are disabled on the
+    // Wyse terminals); at 20 minutes the window closes by itself, after which
+    // the lifecycle deletes the document as usual.
     private void StartViewingLimit()
     {
+        DateTime closeAtUtc = DateTime.UtcNow.AddMilliseconds(CloseAfterMs);
+
         _warnTimer = new System.Windows.Forms.Timer { Interval = WarnAfterMs };
         _warnTimer.Tick += (_, _) =>
         {
             _warnTimer!.Stop();
-            _notify?.Invoke(Core.PdfLifecycleManager.EventWarning,
-                $"“{Path.GetFileName(_pdfPath)}” will close in 5 minutes " +
-                "(20-minute viewing limit).");
+
+            // Owned by this viewer: stays above it and closes together with it.
+            var popup = new ClosingWarningForm(Path.GetFileName(_pdfPath), closeAtUtc, _spanish);
+            popup.FormClosed += (_, _) => popup.Dispose();
+            popup.Show(this);
         };
         _warnTimer.Start();
 
@@ -304,6 +226,7 @@ public sealed class PdfViewerForm : Form
         _closeTimer.Tick += (_, _) =>
         {
             _closeTimer!.Stop();
+            ClosedByTimeLimit = true;
             Close();
         };
         _closeTimer.Start();
@@ -322,29 +245,41 @@ public sealed class PdfViewerForm : Form
 
     /// <summary>
     /// Shows the viewer and blocks the calling (background) thread until the
-    /// window is closed — by the user, the language reconciler, or the 20-minute
-    /// limit. Returns null on success, or an error message if the viewer could
-    /// not start (the lifecycle then keeps the file; there is no Edge fallback).
-    /// <paramref name="preferred"/> empty = no language filter.
+    /// window is closed — by the user, by <paramref name="ct"/> (a better
+    /// version replaced it, or the app exits), or by the 20-minute limit.
+    /// Returns null on success, or an error message if the viewer could not
+    /// start (the lifecycle then keeps the file; there is no Edge fallback).
+    /// <paramref name="spanish"/> selects the language of the pop-ups.
+    /// <paramref name="closedByTimeLimit"/> tells whether the 20-minute limit closed it.
     /// </summary>
-    public static string? ShowAndWait(
-        string pdfPath, CancellationToken ct,
-        string pairingKey, string documentKey, string language, string preferred,
-        string typeGroupKey, bool isDocx, Action<string, string>? notify = null)
+    public static string? ShowAndWait(string pdfPath, CancellationToken ct, bool spanish,
+                                      out bool closedByTimeLimit)
     {
+        closedByTimeLimit = false;
+
+        // Already replaced before it could even open: nothing to show.
+        if (ct.IsCancellationRequested)
+            return null;
+
         string? error = null;
+        bool timedOut = false;
 
         var thread = new Thread(() =>
         {
             try
             {
-                using var form = new PdfViewerForm(pdfPath, pairingKey, documentKey, language, preferred, typeGroupKey, isDocx, notify);
+                using var form = new PdfViewerForm(pdfPath, spanish, ct);
+
+                // If this fires before the window has a handle, BeginInvoke
+                // throws and is ignored: InitAsync checks the token once the
+                // window is up and closes it then.
                 using var reg  = ct.Register(() =>
                 {
                     try { form.BeginInvoke(new Action(form.Close)); } catch { }
                 });
 
                 Application.Run(form);
+                timedOut = form.ClosedByTimeLimit;
                 if (form.LoadFailed)
                     error = form.InitError ?? "unknown viewer error";
             }
@@ -360,6 +295,7 @@ public sealed class PdfViewerForm : Form
         thread.Start();
         thread.Join(); // block until the viewer window closes
 
+        closedByTimeLimit = timedOut;
         return error; // null = success
     }
 }

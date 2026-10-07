@@ -4,26 +4,32 @@ namespace PdfAutoViewer.Core;
 
 /// <summary>
 /// Orchestrates the full lifecycle of each detected PDF:
-///   1. Detect    — notify the UI that a new PDF was found.
+///   1. Detect    — register the version with the <see cref="DocumentCoordinator"/>.
 ///   2. Stabilize — wait for the file size to stop changing (download complete).
-///   3. Open      — open the PDF in the built-in viewer and notify the UI.
-///   4. Wait      — block until the viewer window closes (user, language filter,
-///                  or the 20-minute viewing limit).
+///   3. Select    — ask the coordinator whether this is the version to show
+///                  (language / type / most recent copy). If not, it is
+///                  discarded (deleted) without ever opening.
+///   4. Open      — open the PDF in the built-in viewer and block until the
+///                  window closes (user, a better version replacing it, or the
+///                  20-minute viewing limit).
 ///   5. Delete    — remove the PDF and any browser-generated duplicate copies.
 ///
-/// Each PDF runs in its own background Task so multiple simultaneous downloads
-/// are handled independently without blocking each other.
+/// Each PDF runs on its own dedicated background thread so multiple
+/// simultaneous downloads are handled independently without blocking each other.
 /// </summary>
 public sealed class PdfLifecycleManager : IDisposable
 {
     public const string EventDetected = "detected";
     public const string EventOpened   = "opened";
     public const string EventDeleted  = "deleted";
-    public const string EventError    = "error";
-    public const string EventWarning  = "warning"; // 15-minute viewing-time alert
+
+    private static readonly string LogFile = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "PdfAutoViewer", "app-error.log");
 
     private readonly AppSettings _settings;
     private readonly Action<string, string> _onEvent; // (eventType, message)
+    private readonly Action<PdfError> _onError;       // document did not open
     private readonly CancellationTokenSource _cts = new();
 
     // Tracks which file paths are currently being processed to avoid duplicates
@@ -32,29 +38,51 @@ public sealed class PdfLifecycleManager : IDisposable
     // Records when each file was last finished to ignore late watchdog events
     private readonly Dictionary<string, DateTime> _cooldown = new(StringComparer.OrdinalIgnoreCase);
 
-    // Files already fully handled (path → LastWriteTimeUtc at completion).
+    // Files already fully handled (path → FileStampUtc at completion).
     // The folder rescan re-fires existing files every few seconds; this map
-    // keeps them from reopening. A re-download changes the write time, so
-    // genuinely new content is always processed.
+    // keeps them from reopening. A re-download (new write time) or a fresh
+    // copy of the file (new creation time) is always processed again.
     private readonly Dictionary<string, DateTime> _handled = new(StringComparer.OrdinalIgnoreCase);
 
     // Files whose deletion failed because something (Defender scan, OneDrive
-    // sync, Edge) still holds them. Value = LastWriteTimeUtc when enqueued,
+    // sync, Edge) still holds them. Value = FileStampUtc when enqueued,
     // so a re-downloaded file at the same path is never wrongly deleted.
     private readonly Dictionary<string, DateTime> _pendingDeletes = new(StringComparer.OrdinalIgnoreCase);
 
+    // Decides which version of each document is shown (language / type / copy).
+    private readonly DocumentCoordinator _coordinator;
+
+    /// What happened to each document this session (status window → "Log").
+    public ActivityLog Activity { get; } = new();
+
     private readonly System.Threading.Timer _janitor;
+    private readonly System.Threading.Timer _reconciler;
 
     private readonly object _lock = new();
 
-    public PdfLifecycleManager(AppSettings settings, Action<string, string> onEvent)
+    public PdfLifecycleManager(AppSettings settings, Action<string, string> onEvent,
+                               Action<PdfError> onError)
     {
-        _settings = settings;
-        _onEvent  = onEvent;
-        _janitor  = new System.Threading.Timer(
+        _settings    = settings;
+        _onEvent     = onEvent;
+        _onError     = onError;
+        _coordinator = new DocumentCoordinator(() => PreferredLanguage);
+        _janitor     = new System.Threading.Timer(
             _ => SweepPendingDeletes(), null,
             TimeSpan.FromSeconds(20), TimeSpan.FromSeconds(20));
+
+        // Continuous safety net for the open documents (e.g. the preferred
+        // language changed while two languages were open). In-memory only.
+        _reconciler  = new System.Threading.Timer(
+            _ => _coordinator.Reconcile(), null,
+            TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(2));
     }
+
+    // "SPA" / "ENG", or "" when the preference is Any (read live: the user can
+    // change it at any time from the main window).
+    private string PreferredLanguage =>
+        _settings.PreferredLanguage == LanguagePreference.Any
+            ? "" : _settings.PreferredLanguage.ToString();
 
     // ── Public API ─────────────────────────────────────────────────────────
 
@@ -80,14 +108,17 @@ public sealed class PdfLifecycleManager : IDisposable
 
             // Already handled and unchanged since — re-fired by the rescan
             if (_handled.TryGetValue(key, out var seenStamp) &&
-                seenStamp == SafeLastWriteUtc(key))
+                seenStamp == FileStampUtc(key))
                 return;
 
             _inProgress.Add(key);
         }
 
+        // LongRunning = a dedicated thread. Each cycle blocks for as long as its
+        // document is open; on the shared thread pool a burst of downloads
+        // would starve it and delay every other document.
         var ct = _cts.Token;
-        Task.Run(() =>
+        Task.Factory.StartNew(() =>
         {
             // Cooldown must apply ONLY to completed cycles. Browsers often
             // create a 0-byte placeholder .pdf, delete it, and rename the real
@@ -99,7 +130,7 @@ public sealed class PdfLifecycleManager : IDisposable
             catch (Exception ex)
             {
                 completed = true; // avoid retry storms on persistent errors
-                Notify(EventError, $"Error with '{Path.GetFileName(pdfPath)}': {ex.Message}");
+                ReportError(PdfErrorKind.Unexpected, pdfPath, $"{ex.GetType().Name}: {ex.Message}");
             }
             finally
             {
@@ -109,7 +140,7 @@ public sealed class PdfLifecycleManager : IDisposable
                     if (completed)
                     {
                         _cooldown[key] = DateTime.UtcNow;
-                        _handled[key]  = SafeLastWriteUtc(key);
+                        _handled[key]  = FileStampUtc(key);
 
                         // Bound growth for 24/7 operation. Cooldown entries are
                         // only relevant for ~5s, so drop stale ones; handled
@@ -128,7 +159,7 @@ public sealed class PdfLifecycleManager : IDisposable
                     }
                 }
             }
-        }, ct);
+        }, ct, TaskCreationOptions.LongRunning, TaskScheduler.Default);
     }
 
     // ── Lifecycle steps ────────────────────────────────────────────────────
@@ -136,54 +167,91 @@ public sealed class PdfLifecycleManager : IDisposable
     // Returns true if the cycle completed (file opened or deliberately skipped);
     // false means the file vanished or never stabilized — no cooldown, so a
     // later event for the same path (the real download) is still processed.
-    // Full lifecycle: detect → wait for the download to finish → open in the
-    // built-in viewer → delete. Language filtering (when both _SPA and _ENG
-    // arrive) is handled inside the viewer, which opens every document and
-    // closes the non-matching window once both are visible.
+    // Full lifecycle: detect → wait for the download to finish → select the
+    // version to show → open in the built-in viewer → delete.
     private bool RunLifecycle(string pdfPath, CancellationToken ct)
     {
         Notify(EventDetected, $"PDF detected: {Path.GetFileName(pdfPath)}");
 
-        if (!WaitForStability(pdfPath, ct))
-            return false; // download never completed
+        // Registered right away, so a version still downloading already
+        // counts when its siblings decide whether to open.
+        var entry = _coordinator.Track(pdfPath);
+        try
+        {
+            if (!WaitForStability(pdfPath, ct))
+                return false; // download never completed
 
-        return OpenAndFinish(pdfPath, ct);
+            // The file may have been deleted between stabilization and now
+            // (e.g., duplicate cleanup from another cycle). Never open a dead link.
+            if (!File.Exists(pdfPath))
+                return false;
+
+            // Logged only once the file is complete, so the browser's
+            // short-lived placeholder files never clutter the log.
+            Activity.Add(pdfPath, ActivityKind.Downloaded);
+
+            if (_coordinator.WaitForTurn(entry, ct) == DocumentCoordinator.Decision.Discard)
+            {
+                // A better version of this document is already on screen:
+                // never open this one, just clean it up.
+                Activity.Add(pdfPath, ActivityKind.NotOpened,
+                    $"kept instead: {Path.GetFileName(entry.Winner)}");
+                TryDeleteFile(pdfPath);
+                return true;
+            }
+
+            return OpenAndFinish(pdfPath, entry, ct);
+        }
+        finally
+        {
+            _coordinator.Release(entry);
+        }
     }
 
     // Opens the PDF in the built-in viewer, blocks until the window closes
-    // (by the user, by the language reconciler, or by the 20-minute limit),
-    // then deletes the file. Auto-delete is always on by design.
-    private bool OpenAndFinish(string pdfPath, CancellationToken ct)
+    // (by the user, by a better version replacing it, or by the 20-minute
+    // limit), then deletes the file. Auto-delete is always on by design.
+    private bool OpenAndFinish(string pdfPath, DocumentCoordinator.Entry entry, CancellationToken ct)
     {
-        // The file may have been deleted between stabilization and now
-        // (e.g., duplicate cleanup from another cycle). Never open a dead link.
-        if (!File.Exists(pdfPath))
-            return false;
+        using var close = CancellationTokenSource.CreateLinkedTokenSource(ct, entry.CloseSignal.Token);
+        bool spanish = _settings.PreferredLanguage == LanguagePreference.SPA;
 
-        string lang      = DetectLanguageSuffix(pdfPath);
-        string preferred = _settings.PreferredLanguage == LanguagePreference.Any
-            ? "" : _settings.PreferredLanguage.ToString();
-
-        string? viewerError = UI.PdfViewerForm.ShowAndWait(
-            pdfPath, ct, GetPairingKey(pdfPath), GetDocumentKey(pdfPath), lang, preferred,
-            GetTypeGroupKey(pdfPath), IsDocxType(pdfPath), Notify);
+        Activity.Add(pdfPath, ActivityKind.Opened);
+        string? viewerError = UI.PdfViewerForm.ShowAndWait(pdfPath, close.Token, spanish,
+                                                           out bool closedByTimeLimit);
 
         if (viewerError != null)
         {
             // No Edge fallback by design. Keep the file so it can be opened
             // manually; report the error so the failure is not silent.
-            Notify(EventError, $"Could not open the viewer: {viewerError}");
+            ReportError(PdfErrorKind.ViewerFailed, pdfPath, viewerError);
             return true; // completed (avoids a retry storm)
         }
+
+        if (entry.CloseSignal.IsCancellationRequested)
+            Activity.Add(pdfPath, ActivityKind.Replaced, $"replaced by: {Path.GetFileName(entry.Winner)}");
+        else if (closedByTimeLimit)
+            Activity.Add(pdfPath, ActivityKind.TimeLimit, "20-minute viewing limit");
+        else if (!ct.IsCancellationRequested)
+            Activity.Add(pdfPath, ActivityKind.ClosedByUser);
 
         Notify(EventOpened, $"Opened: {Path.GetFileName(pdfPath)}");
         DeleteWithDuplicates(pdfPath);
         return true;
     }
 
-    private static DateTime SafeLastWriteUtc(string path)
+    // Identifies a file's content version: the later of its last write and its
+    // creation. A browser re-download changes the write time; a file copied or
+    // pasted into Downloads keeps its old write time but gets a new creation
+    // time — both must count as new.
+    internal static DateTime FileStampUtc(string path)
     {
-        try { return File.GetLastWriteTimeUtc(path); }
+        try
+        {
+            var created = File.GetCreationTimeUtc(path);
+            var written = File.GetLastWriteTimeUtc(path);
+            return created > written ? created : written;
+        }
         catch { return DateTime.MinValue; }
     }
 
@@ -299,28 +367,21 @@ public sealed class PdfLifecycleManager : IDisposable
         return "";
     }
 
-    // Pairing key: drops the "(n)" duplicate suffix and the _SPA/_ENG token,
-    // normalizes separators, uppercases. Stripping "(n)" lets a re-downloaded
-    // copy in one language still pair with the other language.
-    // e.g. "D123_H_SPA_Report (1)" and "D123_H_ENG Report" both yield "D123 H REPORT".
-    internal static string GetPairingKey(string pdfPath)
+    // Family key: identifies the DOCUMENT regardless of its version — drops the
+    // "(n)" duplicate suffix, the "_docx" type token and the _SPA/_ENG language
+    // token, normalizes separators and uppercases. Every version of a document
+    // shares it, so they compete for the single slot on screen. e.g.
+    //   "D123_H_SPA_Report_docx (1)" and "D123_H_ENG Report" → "D123 H REPORT".
+    // (Stripping "_docx" too is what lets a docx-derived file in one language
+    // compete with a native file in the other one.)
+    internal static string GetFamilyKey(string pdfPath)
     {
-        string dir      = Path.GetDirectoryName(pdfPath) ?? "";
-        string stem     = StripNumericSuffix(Path.GetFileNameWithoutExtension(pdfPath));
-        string clean    = Regex.Replace(stem, @"_(SPA|ENG)(?=[_\s]|$)", "", RegexOptions.IgnoreCase);
+        string dir   = Path.GetDirectoryName(pdfPath) ?? "";
+        string stem  = StripNumericSuffix(Path.GetFileNameWithoutExtension(pdfPath));
+        stem         = Regex.Replace(stem, @"[_\s]docx$", "", RegexOptions.IgnoreCase);
+        string clean = Regex.Replace(stem, @"_(SPA|ENG)(?=[_\s]|$)", "", RegexOptions.IgnoreCase);
         clean = Regex.Replace(clean, @"[_\s]+", " ").Trim().ToUpperInvariant();
         return Path.Combine(dir.ToUpperInvariant(), clean);
-    }
-
-    // Document key: keeps the language but drops the browser duplicate suffix,
-    // so "doc.pdf", "doc (1).pdf" and "doc (2).pdf" all map to the same key.
-    // Used by the viewer to replace an open document with a freshly downloaded
-    // copy of the SAME document (same language) — the newest version wins.
-    internal static string GetDocumentKey(string pdfPath)
-    {
-        string dir  = Path.GetDirectoryName(pdfPath) ?? "";
-        string stem = StripNumericSuffix(Path.GetFileNameWithoutExtension(pdfPath));
-        return Path.Combine(dir.ToUpperInvariant(), stem.ToUpperInvariant());
     }
 
     // True when the PDF was produced from a .docx source. Those files download as
@@ -330,20 +391,6 @@ public sealed class PdfLifecycleManager : IDisposable
     internal static bool IsDocxType(string pdfPath) =>
         Regex.IsMatch(StripNumericSuffix(Path.GetFileNameWithoutExtension(pdfPath)),
                       @"[_\s]docx$", RegexOptions.IgnoreCase);
-
-    // Type-group key: identifies the same document AND language regardless of its
-    // type (native ".pdf" vs the ".docx"-derived "_docx.pdf"). Keeps the language,
-    // drops the "_docx" token and the "(n)" duplicate suffix, and normalizes
-    // separators — so "D123_H_SPA_Report.pdf" and "D123_H_SPA_Report_docx.pdf"
-    // share the same key. Used to give the docx-derived copy priority.
-    internal static string GetTypeGroupKey(string pdfPath)
-    {
-        string dir  = Path.GetDirectoryName(pdfPath) ?? "";
-        string stem = StripNumericSuffix(Path.GetFileNameWithoutExtension(pdfPath));
-        stem = Regex.Replace(stem, @"[_\s]docx$", "", RegexOptions.IgnoreCase);
-        stem = Regex.Replace(stem, @"[_\s]+", " ").Trim().ToUpperInvariant();
-        return Path.Combine(dir.ToUpperInvariant(), stem);
-    }
 
     // Deletes with growing retries (~9s total). Right after a download the
     // file is often locked by Defender's scan, OneDrive sync, or Edge itself.
@@ -365,6 +412,7 @@ public sealed class PdfLifecycleManager : IDisposable
                     return;
 
                 File.Delete(path);
+                Activity.Add(path, ActivityKind.Deleted);
                 Notify(EventDeleted, $"Deleted: {Path.GetFileName(path)}");
                 return;
             }
@@ -372,10 +420,11 @@ public sealed class PdfLifecycleManager : IDisposable
         }
 
         lock (_lock)
-            _pendingDeletes[Path.GetFullPath(path)] = SafeLastWriteUtc(path);
+            _pendingDeletes[Path.GetFullPath(path)] = FileStampUtc(path);
 
-        Notify(EventError,
-            $"'{Path.GetFileName(path)}' is locked — will keep retrying in background");
+        // Not shown to the operator: it resolves by itself and needs no action.
+        Activity.Add(path, ActivityKind.DeletePending, "locked by another program — retrying every 20 s");
+        Log("Delete", $"'{Path.GetFileName(path)}' is locked — will keep retrying in background");
     }
 
     // Janitor pass: retries every pending delete. Runs every 20 seconds.
@@ -404,7 +453,7 @@ public sealed class PdfLifecycleManager : IDisposable
                 {
                     resolved = true; // already gone
                 }
-                else if (SafeLastWriteUtc(path) != stamp)
+                else if (FileStampUtc(path) != stamp)
                 {
                     // Replaced by a newer download — its own cycle cleans it up
                     resolved = true;
@@ -412,6 +461,7 @@ public sealed class PdfLifecycleManager : IDisposable
                 else
                 {
                     File.Delete(path);
+                    Activity.Add(path, ActivityKind.Deleted, "after retry");
                     Notify(EventDeleted, $"Deleted (retry): {Path.GetFileName(path)}");
                     resolved = true;
                 }
@@ -432,9 +482,31 @@ public sealed class PdfLifecycleManager : IDisposable
         catch { }
     }
 
+    // A document did not open: always logged, and shown to the operator.
+    private void ReportError(PdfErrorKind kind, string pdfPath, string detail)
+    {
+        Log(kind.ToString(), $"'{Path.GetFileName(pdfPath)}' → {detail}");
+        Activity.Add(pdfPath, ActivityKind.Error, detail);
+
+        try { _onError(new PdfError(kind, Path.GetFileName(pdfPath), detail, DateTime.Now)); }
+        catch { }
+    }
+
+    private static void Log(string kind, string message)
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(LogFile)!);
+            File.AppendAllText(LogFile,
+                $"{DateTime.Now:yyyy-MM-dd HH:mm:ss}  [{kind}] {message}{Environment.NewLine}");
+        }
+        catch { /* logging must never throw */ }
+    }
+
     public void Dispose()
     {
         _cts.Cancel();
         _janitor.Dispose();
+        _reconciler.Dispose();
     }
 }

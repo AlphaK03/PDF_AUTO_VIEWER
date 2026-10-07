@@ -60,8 +60,10 @@ public sealed class FolderMonitor : IDisposable
             TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(3));
     }
 
-    // Re-fires every PDF modified in the last 3 minutes (and after monitoring
-    // started, so pre-existing files don't suddenly open on app launch).
+    // Re-fires every PDF that arrived in the last 3 minutes (and after
+    // monitoring started, so pre-existing files don't suddenly open on app
+    // launch). "Arrived" = created or written: a file copied into the folder
+    // keeps its old write time but gets a new creation time.
     private void RescanRecent()
     {
         var folder = _folder;
@@ -72,7 +74,7 @@ public sealed class FolderMonitor : IDisposable
         {
             foreach (var file in Directory.GetFiles(folder, "*.pdf"))
             {
-                DateTime written = File.GetLastWriteTimeUtc(file);
+                DateTime written = PdfLifecycleManager.FileStampUtc(file);
 
                 if (written >= _startedUtc.AddSeconds(-5) &&
                     (DateTime.UtcNow - written).TotalMinutes <= 3)

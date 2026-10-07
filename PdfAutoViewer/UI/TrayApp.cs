@@ -15,6 +15,7 @@ public sealed class TrayApp : ApplicationContext
     private readonly PdfLifecycleManager _pdfManager;
     private readonly NotifyIcon _tray;
     private StatusForm? _statusForm;
+    private ErrorPopupForm? _errorPopup;
 
     public TrayApp()
     {
@@ -23,11 +24,11 @@ public sealed class TrayApp : ApplicationContext
         _tray = BuildTrayIcon();
 
         // Wire the folder monitor to the PDF lifecycle manager
-        _pdfManager = new PdfLifecycleManager(_settings, OnPdfEvent);
+        _pdfManager = new PdfLifecycleManager(_settings, OnPdfEvent, OnPdfError);
         _monitor    = new FolderMonitor(path => _pdfManager.Schedule(path));
         _monitor.Start(_settings.EffectiveWatchFolder);
 
-        _statusForm = new StatusForm(_settings);
+        _statusForm = new StatusForm(_settings, _pdfManager.Activity);
         _statusForm.Show();
 
         // Warm up the built-in viewer's browser process so the first PDF
@@ -78,41 +79,47 @@ public sealed class TrayApp : ApplicationContext
 
     // ── Cross-thread event bridge ──────────────────────────────────────────
 
-    private void OnPdfEvent(string type, string message)
+    // Detected / opened / deleted events are intentionally silent. The
+    // 15-minute viewing-time warning is a pop-up raised by the viewer itself
+    // (see ClosingWarningForm). No tray balloons are used: notifications are
+    // disabled on the Wyse terminals.
+    private static void OnPdfEvent(string type, string message) { }
+
+    private void OnPdfError(PdfError error)
     {
         // Worker threads call this — marshal to the UI thread before touching any controls
         if (_statusForm?.InvokeRequired == true)
         {
-            _statusForm.BeginInvoke(() => HandleEvent(type, message));
+            _statusForm.BeginInvoke(() => ShowError(error));
             return;
         }
-        HandleEvent(type, message);
+        ShowError(error);
     }
 
-    private void HandleEvent(string type, string message)
+    // A document did not open: show it in a pop-up so the failure is never
+    // silent. Only one error window at a time — further errors are added to it.
+    private void ShowError(PdfError error)
     {
-        // The 15-minute viewing-time warning is the only routine notification.
-        if (type == PdfLifecycleManager.EventWarning)
+        if (_errorPopup is null || _errorPopup.IsDisposed)
         {
-            _tray.ShowBalloonTip(8000, "Philips Document Flow (PDF)", message, ToolTipIcon.Warning);
-            return;
+            _errorPopup = new ErrorPopupForm(_settings.PreferredLanguage == LanguagePreference.SPA);
+            _errorPopup.FormClosed += (_, _) => { _errorPopup?.Dispose(); _errorPopup = null; };
+            _errorPopup.AddError(error);
+            _errorPopup.Show();
+        }
+        else
+        {
+            _errorPopup.AddError(error);
         }
 
-        // Errors are surfaced so that a failure to open is never silent.
-        if (type == PdfLifecycleManager.EventError)
-        {
-            _tray.ShowBalloonTip(5000, "Error — Philips Document Flow (PDF)", message, ToolTipIcon.Error);
-            return;
-        }
-
-        // Detected / opened / deleted events are intentionally silent.
+        _errorPopup.Activate();
     }
 
     // ── UI actions ─────────────────────────────────────────────────────────
 
     private void ShowStatusForm()
     {
-        _statusForm ??= new StatusForm(_settings);
+        _statusForm ??= new StatusForm(_settings, _pdfManager.Activity);
         _statusForm.Show();
         _statusForm.BringToFront();
         _statusForm.Activate();

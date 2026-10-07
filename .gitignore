@@ -29,3 +29,11 @@ docs/
 !PdfAutoViewer/docs/
 PdfAutoViewer/docs/*
 !PdfAutoViewer/docs/*.tex
+
+# ---- Pruebas end-to-end (datos generados y app compilada) ----
+e2e/app/
+e2e/generated/
+e2e/results/
+
+# ---- Ejecutables listos para distribuir (fixed x86) ----
+dist/

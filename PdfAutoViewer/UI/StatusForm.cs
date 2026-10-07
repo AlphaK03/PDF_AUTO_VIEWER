@@ -16,12 +16,19 @@ public sealed class StatusForm : Form
 
     private Label _statusLabel = null!;
     private Label _folderLabel = null!;
+    private Label _startupLabel = null!;
     private ComboBox _langCombo = null!;
+    private readonly StartupManager _startup = new();
     private System.Windows.Forms.Timer _refreshTimer = null!;
 
-    public StatusForm(AppSettings settings)
+    // Session activity (diagnostics / test evidence); null hides the Log button.
+    private readonly ActivityLog? _activity;
+    private ActivityLogForm? _activityForm;
+
+    public StatusForm(AppSettings settings, ActivityLog? activity = null)
     {
         _settings = settings;
+        _activity = activity;
 
         BuildLayout();
 
@@ -38,6 +45,13 @@ public sealed class StatusForm : Form
         string folder = _settings.EffectiveWatchFolder;
         _statusLabel.Text = "● ACTIVE";
         _folderLabel.Text = folder.Length > 50 ? "…" + folder[^48..] : folder;
+
+        // Startup registration state, read live from the registry: visible
+        // proof (no Task Manager / admin needed) that the app will start with
+        // the user session.
+        bool registered = _startup.IsStartupEnabled();
+        _startupLabel.Text      = registered ? "✔ Auto-start: registered" : "✖ Auto-start: NOT registered";
+        _startupLabel.ForeColor = registered ? Color.FromArgb(39, 174, 96) : Color.FromArgb(192, 57, 43);
     }
 
     // ── Layout ─────────────────────────────────────────────────────────────
@@ -173,8 +187,44 @@ public sealed class StatusForm : Form
         };
         hideBtn.Click += (_, _) => Hide();
 
+        _startupLabel = new Label
+        {
+            Font     = new Font("Segoe UI", 8.5f),
+            AutoSize = true,
+            Location = new Point(14, 209),
+        };
+
         Controls.AddRange([titleLabel, versionLabel, separator, card,
-                           langTitle, _langCombo, hint, separator2, hideBtn]);
+                           langTitle, _langCombo, hint, separator2, _startupLabel, hideBtn]);
+
+        // Small, unobtrusive diagnostics button: session activity log.
+        if (_activity is not null)
+        {
+            var logBtn = new Button
+            {
+                Text      = "Log",
+                Location  = new Point(244, 204),
+                Size      = new Size(44, 24),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(236, 240, 241),
+                ForeColor = Color.Gray,
+                Font      = new Font("Segoe UI", 8f),
+            };
+            logBtn.Click += (_, _) => ShowActivityLog();
+            Controls.Add(logBtn);
+        }
+    }
+
+    private void ShowActivityLog()
+    {
+        if (_activityForm is null || _activityForm.IsDisposed)
+        {
+            _activityForm = new ActivityLogForm(_activity!);
+            _activityForm.FormClosed += (_, _) => { _activityForm?.Dispose(); _activityForm = null; };
+        }
+        _activityForm.Show();
+        _activityForm.BringToFront();
+        _activityForm.Activate();
     }
 
     private void OnLanguageChanged(object? sender, EventArgs e)
